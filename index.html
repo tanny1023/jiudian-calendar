@@ -92,9 +92,22 @@ details summary{cursor:pointer;color:var(--sub);font-size:13px;margin-top:6px}
       <button class="ghost" id="btnImport">匯入 Excel</button>
       <button class="ghost" id="btnExport">匯出 Excel</button>
       <button class="ghost" id="btnTsv">複製本月（貼回 Excel）</button>
+      <button class="ghost" id="btnG">Google 登入同步</button>
       <input type="file" id="file" accept=".xlsx,.xlsm,.xls" hidden>
     </div>
     <div class="status" id="saveStatus"></div>
+    <div class="status" id="syncStatus" style="color:var(--sub)"></div>
+    <details class="notes" id="gset" style="margin-bottom:10px">
+      <summary style="margin:0">Google 同步設定（第一次使用才需要）</summary>
+      <p class="hint">登入後行事曆會存到您 Google 雲端硬碟的隱藏「應用程式資料」區，換電腦登入同一個 Google 帳號就能看到。需要一組 OAuth 用戶端 ID：</p>
+      <ol class="hint" style="margin:4px 0 8px;padding-left:20px">
+        <li>到 console.cloud.google.com 建立專案，「API 和服務」→「程式庫」啟用 <b>Google Drive API</b>。</li>
+        <li>「OAuth 同意畫面」選「外部」，填應用程式名稱與您的 Email；建議按「發布應用程式」（只用 drive.appdata 權限，不需審核；留在測試狀態每 7 天要重新授權）。</li>
+        <li>「憑證」→「建立憑證」→「OAuth 用戶端 ID」→ 類型選「網頁應用程式」，「已授權的 JavaScript 來源」填 <b>https://tanny1023.github.io</b>。</li>
+        <li>把產生的「用戶端 ID」貼到下面，按儲存，再按「Google 登入同步」。</li>
+      </ol>
+      <div style="display:flex;gap:8px"><input type="text" id="cid" placeholder="xxxxxxxx.apps.googleusercontent.com"><button class="ghost" id="cidSave">儲存</button></div>
+    </details>
     <div id="cal"></div>
     <p class="hint">會議欄「一行＝一個 Excel 儲存格」，同一格有多場會議時用「、」隔開（例：上午9:00第145次週會、第359次專業技術協調會議）。報表／備註欄不會進大事紀。</p>
   </section>
@@ -163,6 +176,7 @@ function saveSoon(){
   clearTimeout(saveT);
   saveT = setTimeout(()=>{
     store.set('jd_days', JSON.stringify(days));
+    touch();
     const s=$('saveStatus'); s.textContent='已自動儲存'; setTimeout(()=>{ if(s.textContent==='已自動儲存') s.textContent=''; },1500);
     if(!$('p2').hidden) gen();
   },300);
@@ -248,7 +262,7 @@ async function doImport(file){
     const res = importWorkbook(wb);
     if(!res.count){ alert('在「'+res.sheet+'」分頁沒有讀到日期資料，請確認欄位順序：周次、日期、星期、報表、會議…'); return; }
     if(Object.keys(days).length && !confirm(`將以「${res.sheet}」的 ${res.count} 天資料取代目前行事曆內容，確定嗎？\n（建議先按「匯出 Excel」備份）`)) return;
-    days = res.days; store.set('jd_days',JSON.stringify(days));
+    days = res.days; store.set('jd_days',JSON.stringify(days)); touch();
     renderCal(); if(!$('p2').hidden) gen();
     $('saveStatus').textContent = `已匯入「${res.sheet}」${res.count} 天資料`;
   }catch(e){ alert('讀取失敗：'+(e.message||e)); }
@@ -535,12 +549,125 @@ $('dEnd').addEventListener('change',gen);
 $('prevB').onclick=()=>setRange(addDays($('dStart').value||mondayOf(todayKey()),-14));
 $('nextB').onclick=()=>setRange(addDays($('dStart').value||mondayOf(todayKey()),14));
 $('thisB').onclick=()=>setRange(mondayOf(todayKey()));
-$('gap').addEventListener('input',()=>{ store.set('jd_gap',$('gap').value); gen(); });
-$('noise').addEventListener('input',()=>{ store.set('jd_noise',$('noise').value); gen(); });
+$('gap').addEventListener('input',()=>{ store.set('jd_gap',$('gap').value); touch(); gen(); });
+$('noise').addEventListener('input',()=>{ store.set('jd_noise',$('noise').value); touch(); gen(); });
 $('out').addEventListener('input',fitOut);
 const flashOut=(msg,ok=true)=>{ const s=$('outStatus'); s.textContent=msg; s.className='status'+(ok?'':' err'); setTimeout(()=>s.textContent='',2000); };
 $('copyOut').onclick=async()=>flashOut(await copyText($('out').value)?'已複製大事紀':'複製失敗，請手動選取',true);
 $('copyAll').onclick=async()=>flashOut(await copyText($('out').value+'\n'+'-'.repeat(40)+'\n'+lastRemind)?'已連同提醒複製':'複製失敗，請手動選取',true);
+
+/* ---------- Google 雲端同步（Drive appDataFolder） ---------- */
+const CLIENT_ID_DEFAULT = '';   // 填入後，其他電腦不用再設定
+const GFILE = 'jiudian-calendar.json';
+const clientId = () => (store.get('jd_cid','') || CLIENT_ID_DEFAULT).trim();
+let gTok=null, gExp=0, gTC=null, gFileId=null, pushT=null, syncing=false;
+const gOK = () => gTok && Date.now() < gExp-60000;
+function setSync(t,err){ const s=$('syncStatus'); s.textContent=t; s.style.color=err?'#c0392b':'var(--sub)'; }
+function touch(){
+  store.set('jd_mod',String(Math.max(Date.now(),+store.get('jd_last','0')+1)));   // 避免電腦時鐘較慢時推不上去
+  if(store.get('jd_g','')!=='1') return;
+  if(!gOK()){ setSync('尚未同步到 Google（按「重新連線 Google」）',true); return; }
+  clearTimeout(pushT); pushT=setTimeout(()=>syncNow(),2000);
+}
+function gInit(){
+  if(gTC) return true;
+  if(!clientId()||!(window.google&&google.accounts)) return false;
+  gTC=google.accounts.oauth2.initTokenClient({client_id:clientId(),scope:'https://www.googleapis.com/auth/drive.appdata',callback:onTok});
+  return true;
+}
+function updateBtn(){
+  const on=store.get('jd_g','')==='1', b=$('btnG');
+  b.textContent = !on ? 'Google 登入同步' : gOK() ? '登出 Google' : '重新連線 Google';
+}
+async function onTok(r){
+  if(r.error){
+    if(r.error==='interaction_required'||r.error==='access_denied'||r.error==='popup_closed')
+      setSync(store.get('jd_g','')==='1'?'需要重新連線 Google（按右上方按鈕）':'已取消登入',true);
+    else setSync('Google 登入失敗：'+r.error,true);
+    updateBtn(); return;
+  }
+  gTok=r.access_token; gExp=Date.now()+(r.expires_in||3600)*1000; store.set('jd_g','1');
+  try{ const a=await (await gfetch('https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)')).json(); if(a.user) store.set('jd_gmail',a.user.emailAddress); }catch(e){}
+  updateBtn(); syncNow();
+}
+function gLogin(prompt){
+  if(!clientId()){ $('gset').open=true; $('gset').scrollIntoView({block:'center'}); setSync('請先貼上 Google OAuth 用戶端 ID',true); return; }
+  if(!gInit()){ setSync('Google 元件尚未載入，請確認網路後重新整理',true); return; }
+  gTC.requestAccessToken({prompt});
+}
+async function gfetch(url,opt={}){
+  const r=await fetch(url,Object.assign({},opt,{headers:Object.assign({Authorization:'Bearer '+gTok},opt.headers||{})}));
+  if(r.status===401){ gTok=null; updateBtn(); throw new Error('登入已過期'); }
+  if(!r.ok) throw new Error('Google Drive 回應 '+r.status);
+  return r;
+}
+async function gFind(){
+  const q=encodeURIComponent(`name='${GFILE}'`);
+  const j=await (await gfetch(`https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id)`)).json();
+  return j.files&&j.files[0]?j.files[0].id:null;
+}
+async function gPull(){
+  gFileId=await gFind(); if(!gFileId) return null;
+  return await (await gfetch(`https://www.googleapis.com/drive/v3/files/${gFileId}?alt=media`)).json();
+}
+async function gPush(){
+  let mod=+store.get('jd_mod','0'); if(!mod){ mod=Date.now(); store.set('jd_mod',String(mod)); }
+  const body=JSON.stringify({updated:mod,days,noise:$('noise').value,gap:$('gap').value});
+  if(!gFileId) gFileId=await gFind();
+  if(gFileId){
+    await gfetch(`https://www.googleapis.com/upload/drive/v3/files/${gFileId}?uploadType=media`,{method:'PATCH',headers:{'Content-Type':'application/json'},body});
+  }else{
+    const b='jdb'+Date.now();
+    const mp=`--${b}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify({name:GFILE,parents:['appDataFolder']})}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${body}\r\n--${b}--`;
+    const j=await (await gfetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',{method:'POST',headers:{'Content-Type':'multipart/related; boundary='+b},body:mp})).json();
+    gFileId=j.id;
+  }
+  store.set('jd_last',String(mod));
+}
+function takeRemote(rem){
+  days=rem.days||{}; store.set('jd_days',JSON.stringify(days));
+  if(rem.noise!=null){ $('noise').value=rem.noise; store.set('jd_noise',rem.noise); }
+  if(rem.gap!=null){ $('gap').value=rem.gap; store.set('jd_gap',rem.gap); }
+  store.set('jd_mod',String(rem.updated)); store.set('jd_last',String(rem.updated));
+  renderCal(); if(!$('p2').hidden) gen();
+}
+async function syncNow(){
+  if(syncing||!gOK()) return; syncing=true; clearTimeout(pushT);
+  try{
+    setSync('同步中…');
+    const rem=await gPull();
+    const mod=+store.get('jd_mod','0'), last=+store.get('jd_last','0');
+    const hasLocal=Object.keys(days).length>0;
+    let msg='已與 Google 同步';
+    if(!rem){ if(hasLocal) await gPush(); }
+    else if(rem.updated===last){ if(mod>last) await gPush(); }
+    else if(!hasLocal){ takeRemote(rem); msg='已從 Google 載入行事曆'; }
+    else if(JSON.stringify(rem.days)===JSON.stringify(days)){ store.set('jd_mod',String(rem.updated)); store.set('jd_last',String(rem.updated)); }
+    else if(mod>last){
+      if(confirm('Google 雲端與這台電腦的行事曆內容不同。\n\n按「確定」＝用雲端版本取代這台電腦的內容\n按「取消」＝用這台電腦的內容覆蓋雲端')){ takeRemote(rem); msg='已從 Google 載入行事曆'; }
+      else{ store.set('jd_mod',String(Date.now())); await gPush(); msg='已用這台的內容覆蓋雲端'; }
+    }
+    else{ takeRemote(rem); msg='已載入其他電腦的最新內容'; }
+    const em=store.get('jd_gmail','');
+    setSync(`${msg}${em?'（'+em+'）':''}　${new Date().toLocaleTimeString('zh-TW',{hour12:false})}`);
+  }catch(e){ setSync('同步失敗：'+(e.message||e),true); }
+  finally{ syncing=false; updateBtn(); }
+}
+$('btnG').onclick=()=>{
+  if(store.get('jd_g','')==='1' && gOK()){
+    if(!confirm('登出 Google 後，這台電腦不再自動同步（本機資料與雲端資料都保留）。確定登出？')) return;
+    try{ google.accounts.oauth2.revoke(gTok); }catch(e){}
+    gTok=null; store.set('jd_g',''); store.set('jd_gmail',''); setSync('已登出 Google 同步'); updateBtn();
+  }else gLogin(store.get('jd_g','')==='1'?'':'consent');
+};
+$('cid').value=clientId();
+$('cidSave').onclick=()=>{ store.set('jd_cid',$('cid').value.trim()); gTC=null; setSync('已儲存用戶端 ID，請按「Google 登入同步」'); };
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden && gOK()) syncNow(); });
+function gBoot(){
+  updateBtn();
+  if(store.get('jd_g','')==='1' && clientId() && gInit()){ setSync('正在連線 Google…'); gTC.requestAccessToken({prompt:'none'}); }
+}
+window.addEventListener('load',()=>{ const sc=document.createElement('script'); sc.src='https://accounts.google.com/gsi/client'; sc.async=true; sc.onload=gBoot; document.head.appendChild(sc); updateBtn(); });
 
 /* ---------- 初始化 ---------- */
 (function init(){
