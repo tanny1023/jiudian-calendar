@@ -78,6 +78,7 @@ details summary{cursor:pointer;color:var(--sub);font-size:13px;margin-top:6px}
   <div class="seg">
     <button id="t1" aria-pressed="true">行事曆</button>
     <button id="t2" aria-pressed="false">雙週大事紀</button>
+    <button id="t3" aria-pressed="false">應辦事項管控表</button>
   </div>
 
   <!-- ========== 行事曆 ========== -->
@@ -146,9 +147,37 @@ details summary{cursor:pointer;color:var(--sub);font-size:13px;margin-top:6px}
       </div>
     </div>
   </section>
+
+  <!-- ========== 應辦事項管控表 ========== -->
+  <section id="p3" hidden>
+    <div class="card" style="margin-bottom:14px">
+      <p class="hint" style="margin-top:0">提供資料，自動更新「新工處建工科業務應辦事項及進度管控表」對應欄位。檔案只在這台電腦的瀏覽器裡處理，不會上傳。</p>
+      <label for="c_base">① 上週的管控表（Excel，當底稿；保留格式與其他列管事項）</label>
+      <input type="file" id="c_base" accept=".xlsx">
+      <label for="c_log">② 施工日誌（貼上全文，抓「累積預定進度／累積實際進度」）</label>
+      <textarea id="c_log" rows="6" placeholder="貼上最新一份施工日誌"></textarea>
+      <label for="c_pdf">③ 工進品質暨職安管制協調會議紀錄（PDF）</label>
+      <input type="file" id="c_pdf" accept=".pdf">
+      <p class="hint">更新「壹」的三張送審表；原有的契約圖說釋疑整批移到「叁、上週解除列管」（辦畢時間＝辦理期限），本週提送的列入「貳」。</p>
+      <div class="row2" style="grid-template-columns:repeat(3,1fr)">
+        <div><label for="c_date">④ 填表日期</label><input type="text" id="c_date"></div>
+        <div><label for="c_period">估驗期數</label><input type="number" id="c_period" placeholder="例如 27"></div>
+        <div><label for="c_est">估驗進度（%）</label><input type="number" id="c_est" step="0.001" placeholder="例如 15.42"></div>
+      </div>
+      <p class="hint">估驗期數、估驗進度留空＝沿用底稿上的值。</p>
+      <div class="btnrow"><button class="primary" id="c_go">產生更新後的管控表</button></div>
+    </div>
+    <div class="notes" id="c_result" hidden>
+      <h3>處理結果</h3>
+      <ul id="c_report"></ul>
+      <a id="c_dl" style="display:none;text-decoration:none;margin-top:6px;border-radius:8px;padding:9px 16px;background:var(--ok);color:var(--accent-ink)">下載 Excel</a>
+    </div>
+  </section>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const store = {
@@ -527,12 +556,12 @@ function fitOut(){ const o=$('out'); o.style.height='auto'; o.style.height=Math.
 
 /* ---------- 事件 ---------- */
 function setPane(n){
-  $('p1').hidden = n!==1; $('p2').hidden = n!==2;
-  $('t1').setAttribute('aria-pressed',n===1); $('t2').setAttribute('aria-pressed',n===2);
+  $('p1').hidden = n!==1; $('p2').hidden = n!==2; $('p3').hidden = n!==3;
+  $('t1').setAttribute('aria-pressed',n===1); $('t2').setAttribute('aria-pressed',n===2); $('t3').setAttribute('aria-pressed',n===3);
   store.set('jd_pane',String(n));
   if(n===2) gen();
 }
-$('t1').onclick=()=>setPane(1); $('t2').onclick=()=>setPane(2);
+$('t1').onclick=()=>setPane(1); $('t2').onclick=()=>setPane(2); $('t3').onclick=()=>setPane(3);
 $('month').addEventListener('change',()=>{ if($('month').value) setMonth($('month').value); });
 $('prevM').onclick=()=>shiftMonth(-1); $('nextM').onclick=()=>shiftMonth(1);
 $('goToday').onclick=()=>{ const t=new Date(); setMonth(`${t.getFullYear()}-${pad(t.getMonth()+1)}`); };
@@ -677,7 +706,153 @@ window.addEventListener('load',()=>{ const sc=document.createElement('script'); 
   $('noise').value = store.get('jd_noise',DEFAULT_NOISE.join('\n'));
   const s = store.get('jd_start',''); setRange(s||mondayOf(todayKey()));
   renderCal();
-  setPane(store.get('jd_pane','1')==='2'?2:1);
+  setPane({'2':2,'3':3}[store.get('jd_pane','1')]||1);
+})();
+/* ---------- 應辦事項管控表 ---------- */
+(function(){
+const g = id => document.getElementById(id);
+const SECTIONS = [['計畫書',8,9],['材料設備',10,11],['施工圖',12,13]];
+const OPEN = [19,20,21,22,23,24], CLOSED = [37,38,39,40,41,42,43];
+const DEF_STATUS = '設計單位、協力廠商釐清中', DEF_OWNER = '九典';
+const rocDate = t => { const m=/(\d{3})\/(\d{1,2})\/(\d{1,2})/.exec(t||''); return m?new Date(Date.UTC(+m[1]+1911,m[2]-1,m[3])):null; };
+const rocToday = () => { const d=new Date(); return `${d.getFullYear()-1911}/${d.getMonth()+1}/${d.getDate()}`; };
+g('c_date').value = rocToday();
+
+/* PDF → 依 y 座標分行 */
+function toLines(items){
+  const sorted=[...items].sort((a,b)=>b.y-a.y||a.x-b.x), lines=[];
+  for(const it of sorted){
+    const L=lines.find(l=>Math.abs(l.y-it.y)<3);
+    if(L) L.items.push(it); else lines.push({y:it.y,items:[it]});
+  }
+  lines.forEach(l=>{
+    l.items.sort((a,b)=>a.x-b.x);
+    const cells=[];  // pdf.js 會把一格拆成多段（如「97」「%」），間距小的併回同一格
+    for(const it of l.items){
+      const c=cells[cells.length-1];
+      if(c && it.x-(c.x+c.w)<2){ c.s+=it.s; c.w=it.x+it.w-c.x; } else cells.push({...it});
+    }
+    l.items=cells; l.text=cells.map(i=>i.s).join(' ');
+  });
+  return lines;
+}
+async function readPdf(buf){
+  pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const pdf=await pdfjsLib.getDocument({data:buf}).promise, lines=[];
+  for(let p=1;p<=pdf.numPages;p++){
+    const tc=await (await pdf.getPage(p)).getTextContent();
+    const items=tc.items.filter(i=>i.str.trim()).map(i=>({s:i.str.trim(),x:i.transform[4],y:i.transform[5],w:i.width}));
+    toLines(items).forEach(l=>{ l.page=p; lines.push(l); });
+  }
+  return lines;
+}
+function parseReview(lines){
+  const out=[], re=/^(建\s*築|機\s*電)\s+(\d+(?:\s+\d+){8})\s+\d+\s*%/;  // 總件數,應,已,逾期,監造,承商,專管,機關,已備查 + 達成率
+  for(const l of lines){
+    const m=re.exec(l.text); if(!m) continue;
+    const n=m[2].split(/\s+/).map(Number);
+    // 應提送,監造,審退(承商修正),PCM(專管),機關,已備查,逾期未送
+    out.push({kind:m[1].replace(/\s/g,''),v:[n[1],n[4],n[5],n[6],n[7],n[8],n[3]]});
+    if(out.length===6) break;
+  }
+  return out;
+}
+function parseSubmitted(lines){
+  const res=[]; let sec=null;
+  const flush=()=>{
+    if(!sec) return;
+    const rows=sec.lines.filter(l=>/QA-[A-Z0-9-]+/.test(l.text)).map(l=>{
+      const no=/QA-[A-Z0-9-]+/.exec(l.text)[0];
+      const ds=l.items.filter(i=>/\d{3}\/\d{1,2}\/\d{1,2}/.test(i.s));
+      return {no,y:l.y,filed:rocDate(ds[0]&&ds[0].s),due:rocDate(ds[1]&&ds[1].s),xEnd:Math.max(...ds.map(i=>i.x+i.w)),title:[]};
+    });
+    if(rows.length){
+      const xEnd=Math.min(...rows.map(r=>r.xEnd));
+      for(const l of sec.lines) for(const it of l.items){
+        if(it.x<xEnd-2 || /圖說釋疑項目|^無$|以下空白|QA-/.test(it.s)) continue;
+        let best=rows[0]; for(const r of rows) if(Math.abs(r.y-it.y)<Math.abs(best.y-it.y)) best=r;
+        best.title.push(it);
+      }
+      rows.forEach(r=>{ r.title=r.title.sort((a,b)=>b.y-a.y||a.x-b.x).map(i=>i.s).join('').replace(/\s/g,''); res.push(r); });
+    }
+    sec=null;
+  };
+  for(const l of lines){
+    if(/本週提送\s*[（(]\s*(土建|機電)/.test(l.text)){ flush(); sec={lines:[]}; continue; }
+    if(/本週回覆/.test(l.text) || /^[（(]\s*[一二]\s*[)）]\s*圖說釋疑/.test(l.text)){ flush(); continue; }
+    if(sec){ sec.lines.push(l); if(/以下空白/.test(l.text)) flush(); }
+  }
+  flush();
+  return res;
+}
+function parseLog(t){
+  const o={};
+  for(const [k,label] of [['planned','累積預定進度'],['actual','累積實際進度']]){
+    const m=new RegExp(label+'[：:]\\s*([\\d.]+)\\s*%').exec(t||''); if(m) o[k]=Math.round(parseFloat(m[1])*1e4)/1e6;
+  }
+  return o;
+}
+
+async function run(){
+  const report=[], baseF=g('c_base').files[0];
+  if(!baseF) throw new Error('請上傳上週的管控表（Excel）');
+  const wb=new ExcelJS.Workbook(); await wb.xlsx.load(await baseF.arrayBuffer());
+  const ws=wb.worksheets[0], C=a=>ws.getCell(a);
+
+  C('L1').value=g('c_date').value.trim()||rocToday(); report.push('填表日期：'+C('L1').value);
+  const logText=g('c_log').value, log=parseLog(logText);
+  if(log.planned!=null){ C('B4').value=log.planned; report.push('預計進度：'+(log.planned*100).toFixed(3)+'%'); }
+  if(log.actual!=null){ C('D4').value=log.actual; report.push('實際進度：'+(log.actual*100).toFixed(3)+'%'); }
+  if(logText.trim() && !Object.keys(log).length) report.push('⚠ 施工日誌中找不到「累積預定進度／累積實際進度」，進度未更新');
+  if(g('c_est').value!==''){ C('H4').value=parseFloat(g('c_est').value)/100; report.push('估驗進度：'+g('c_est').value+'%'); }
+  if(g('c_period').value!==''){ C('J4').value=parseInt(g('c_period').value,10); report.push('估驗期數：'+g('c_period').value); }
+
+  const pdfF=g('c_pdf').files[0];
+  if(pdfF){
+    const lines=await readPdf(await pdfF.arrayBuffer());
+    const review=parseReview(lines);
+    if(review.length===6){
+      SECTIONS.forEach(([name,rb,re],i)=>{
+        [[rb,review[i*2]],[re,review[i*2+1]]].forEach(([row,r])=>{
+          'CDEFGHJ'.split('').forEach((col,k)=>{ C(col+row).value=r.v[k]; });
+        });
+        report.push('壹、'+name+'：已更新');
+      });
+    } else report.push(`⚠ 會議紀錄只找到 ${review.length} 列送審數字（應為 6 列：三張表各含建築、機電），壹未更新`);
+
+    // 貳 → 叁：原有項目整批移下來
+    const closed=[];
+    for(const r of OPEN){
+      if(C('B'+r).value||C('C'+r).value) closed.push({no:C('B'+r).value,title:C('C'+r).value,owner:C('E'+r).value,filed:C('F'+r).value,due:C('G'+r).value});
+    }
+    closed.forEach(i=>report.push('移至上週解除列管：'+i.no));
+    const open=[], seen=new Set();
+    for(const s of parseSubmitted(lines)) if(!seen.has(s.no)){ seen.add(s.no); open.push({no:s.no,title:s.title,owner:DEF_OWNER,filed:s.filed,due:s.due,status:DEF_STATUS}); report.push('新增列管：'+s.no); }
+    if(open.length>OPEN.length) throw new Error(`貳、契約圖說釋疑有 ${open.length} 筆，超過表格可容納的 ${OPEN.length} 列，請先在 Excel 插入列`);
+    if(closed.length>CLOSED.length) throw new Error(`叁、解除列管有 ${closed.length} 筆，超過表格可容納的 ${CLOSED.length} 列，請先在 Excel 插入列`);
+    OPEN.forEach(r=>'BCEFGHK'.split('').forEach(c=>{ C(c+r).value=null; }));
+    CLOSED.forEach(r=>'BCEFGHIK'.split('').forEach(c=>{ C(c+r).value=null; }));
+    OPEN.forEach((r,k)=>{ const i=open[k]; if(!i) return; C('B'+r).value=i.no; C('C'+r).value=i.title; C('E'+r).value=i.owner; C('F'+r).value=i.filed; C('G'+r).value=i.due; C('H'+r).value=i.status; });
+    CLOSED.forEach((r,k)=>{ const i=closed[k]; if(!i) return; C('B'+r).value=i.no; C('C'+r).value=i.title; C('E'+r).value=i.owner; C('F'+r).value=i.filed; C('G'+r).value=i.due; C('H'+r).value=i.due; });
+  } else report.push('（未上傳會議紀錄 PDF，壹與契約圖說釋疑未更新）');
+
+  wb.calcProperties={fullCalcOnLoad:true};
+  const buf=await wb.xlsx.writeBuffer();
+  return {report,buf,name:'應辦事項管控表_'+(g('c_date').value.trim()||rocToday()).replace(/\//g,'.')+'.xlsx'};
+}
+
+g('c_go').onclick=async()=>{
+  const btn=g('c_go'); btn.disabled=true; btn.textContent='處理中…';
+  g('c_result').hidden=false; g('c_report').innerHTML=''; g('c_dl').style.display='none';
+  try{
+    const r=await run();
+    g('c_report').innerHTML=r.report.map(t=>`<li class="${t.startsWith('⚠')?'warn':''}">${t.replace(/</g,'&lt;')}</li>`).join('');
+    const a=g('c_dl'); if(a.href.startsWith('blob:')) URL.revokeObjectURL(a.href);
+    a.href=URL.createObjectURL(new Blob([r.buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+    a.download=r.name; a.style.display='inline-block';
+  }catch(e){ g('c_report').innerHTML=`<li class="warn">${String(e.message||e).replace(/</g,'&lt;')}</li>`; console.error(e); }
+  finally{ btn.disabled=false; btn.textContent='產生更新後的管控表'; }
+};
 })();
 </script>
 </body>
