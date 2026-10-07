@@ -6,17 +6,14 @@
 <title>報表進度小幫手</title>
 <style>
 :root{
-  --bg:#f5f6f8; --card:#fff; --ink:#1c2330; --sub:#5d6778; --line:#dde1e8;
-  --accent:#1f5fbf; --accent-ink:#fff; --ok:#12703a; --warn:#b45309; --out-bg:#eef4ff; --we:#f0f2f6; --today:#fff8e1;
-}
-@media (prefers-color-scheme: dark){
-  :root{--bg:#12161d; --card:#1b212b; --ink:#e7ebf2; --sub:#9aa5b8; --line:#2c3543;
-    --accent:#5b9bff; --accent-ink:#0b1220; --ok:#5fd28f; --warn:#f0a94a; --out-bg:#18263d; --we:#171c25; --today:#2b2610;}
+  --bg:#fff; --card:#fff; --ink:#000; --sub:#444; --line:#b8b8b8;
+  --accent:#1f5fbf; --accent-ink:#fff; --ok:#12703a; --warn:#b45309; --out-bg:#fff; --we:#fff; --today:#fff;
+  color-scheme:light;
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);
   font:16px/1.55 "Microsoft JhengHei","Noto Sans TC",system-ui,sans-serif}
-.wrap{max-width:1100px;margin:0 auto;padding:20px 16px 60px}
+.wrap{max-width:1700px;margin:0 auto;padding:20px 16px 60px}
 h1{font-size:22px;margin:0 0 4px}
 .lead{color:var(--sub);margin:0 0 18px;font-size:14px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
@@ -39,20 +36,18 @@ button.ghost:hover{border-color:var(--accent)}
 .status{font-size:13px;color:var(--ok);min-height:20px}
 .status.err{color:#c0392b}
 
-/* 行事曆 */
-.day{display:grid;grid-template-columns:92px minmax(0,1.3fr) minmax(0,1fr);gap:10px;
-  padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--card);margin-bottom:6px;align-items:start}
-.day.we{background:var(--we)}
-.day.today{background:var(--today);border-color:var(--warn)}
-.day .dh{padding-top:6px;line-height:1.3}
-.day .dh b{font-size:17px;display:block}
-.day .dh span{font-size:13px;color:var(--sub)}
-.day .dh i{font-style:normal;font-size:12px;color:var(--warn);display:block}
-.day label{margin:0 0 2px;font-size:12px}
-.day textarea{overflow:hidden}
-@media(max-width:700px){.day{grid-template-columns:1fr}.day .dh{display:flex;gap:8px;align-items:baseline;padding:0}}
-.empty{padding:40px 10px;text-align:center;color:var(--sub)}
-
+/* 行事曆（仿 Excel 表格） */
+#cal{overflow:auto;max-height:calc(100vh - 230px);border:1px solid #000;background:#fff;position:relative}
+#sheet{border-collapse:separate;border-spacing:0;table-layout:fixed;background:#fff;color:#000;font-size:14px}
+#sheet th{position:sticky;top:0;z-index:2;background:#fff;border-right:1px solid #000;border-bottom:2px solid #000;padding:5px 6px;text-align:center;font-weight:700}
+#sheet td{border-right:1px solid #b8b8b8;border-bottom:1px solid #b8b8b8;padding:0;vertical-align:top;background:#fff}
+#sheet td.dt,#sheet td.wd{padding:4px 6px;white-space:nowrap}
+#sheet td.dt{font-weight:700}
+#sheet td.dt.today{outline:2px solid #000;outline-offset:-2px}
+#sheet textarea{display:block;width:100%;min-height:26px;border:0;border-radius:0;background:transparent;color:#000;
+  padding:4px 6px;font:inherit;line-height:1.4;resize:none;overflow:hidden;field-sizing:content}
+#sheet textarea:focus{outline:2px solid var(--accent);outline-offset:-2px;background:#fffef0}
+#p2,#p3{max-width:1100px}
 /* 雙週大事紀 */
 .grid{display:grid;grid-template-columns:minmax(0,320px) minmax(0,1fr);gap:16px;align-items:start}
 @media(max-width:820px){.grid{grid-template-columns:1fr}}
@@ -84,17 +79,26 @@ details summary{cursor:pointer;color:var(--sub);font-size:13px;margin-top:6px}
   <!-- ========== 行事曆 ========== -->
   <section id="p1">
     <div class="tools">
-      <button class="ghost" id="prevM">‹ 上個月</button>
-      <input type="month" id="month">
-      <button class="ghost" id="nextM">下個月 ›</button>
-      <button class="ghost" id="goToday">今天</button>
-      <label class="chk"><input type="checkbox" id="onlyFilled"> 只顯示有內容的日子</label>
+      <input type="month" id="month" title="跳到月份">
+      <button class="ghost" id="goToday">跳到今天</button>
+      <button class="ghost" id="btnAddCol">＋會議欄</button>
       <span class="sp"></span>
+      <button class="ghost" id="btnAF">自動帶入固定事項</button>
       <button class="ghost" id="btnImport">匯入 Excel</button>
       <button class="ghost" id="btnExport">匯出 Excel</button>
       <button class="ghost" id="btnTsv">複製本月（貼回 Excel）</button>
       <button class="ghost" id="btnG">Google 登入同步</button>
       <input type="file" id="file" accept=".xlsx,.xlsm,.xls" hidden>
+    </div>
+    <div class="notes" id="afbox" hidden style="margin:0 0 10px">
+      <h3>自動帶入固定會議／報表</h3>
+      <p class="hint" style="margin:0 0 6px">只補「空白」，不會改到您已經寫的內容。帶入：每週四／週五、雙週三／四報表，月底報表、每月10日報表；每週三週會＋專技（屆次接續）、雙週進度會議、專管督導、機關督導、月會；周次編號。BIM 會議沒有固定週期，不會帶入。</p>
+      <div class="row2" style="max-width:420px">
+        <div><label for="afS" style="margin-top:0">從</label><input type="date" id="afS"></div>
+        <div><label for="afE" style="margin-top:0">到</label><input type="date" id="afE"></div>
+      </div>
+      <div class="btnrow"><button class="primary" id="afGo">帶入</button><button class="ghost" id="afUndo">復原上一次帶入</button></div>
+      <div class="status" id="afRes" style="margin-top:6px"></div>
     </div>
     <div class="status" id="saveStatus"></div>
     <div class="status" id="syncStatus" style="color:var(--sub)"></div>
@@ -110,7 +114,7 @@ details summary{cursor:pointer;color:var(--sub);font-size:13px;margin-top:6px}
       <div style="display:flex;gap:8px"><input type="text" id="cid" placeholder="xxxxxxxx.apps.googleusercontent.com"><button class="ghost" id="cidSave">儲存</button></div>
     </details>
     <div id="cal"></div>
-    <p class="hint">會議欄「一行＝一個 Excel 儲存格」，同一格有多場會議時用「、」隔開（例：上午9:00第145次週會、第359次專業技術協調會議）。報表／備註欄不會進大事紀。</p>
+    <p class="hint">版面比照 Excel「01-行事曆」：每一格就是一個儲存格，直接點進去改。同一格有多場會議時用「、」隔開。報表欄不會進雙週大事紀。</p>
   </section>
 
   <!-- ========== 雙週大事紀 ========== -->
@@ -195,10 +199,133 @@ const md = k => `${pad(+k.slice(5,7))}/${pad(+k.slice(8,10))}`;
 const todayKey = () => keyOf(new Date());
 const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 
+/* AF-START 固定會議／報表自動帶入（只補空白，不覆蓋既有內容） */
+const mcellsOf = rec => Array.isArray(rec.m) ? rec.m : (rec.m ? String(rec.m).split('\n') : []);
+function normDays(o){
+  Object.values(o).forEach(r=>{
+    r.a = r.a==null ? '' : String(r.a); r.r = r.r || '';
+    r.m = mcellsOf(r).map(x=>x==null?'':String(x));
+    while(r.m.length && !r.m[r.m.length-1].trim()) r.m.pop();
+  });
+  return o;
+}
+const isEmptyRec = r => !r.a && !r.r && !r.m.some(x=>x.trim());
+
+function autoFillDays(D, start, end){
+  const st = {};
+  const bump = n => { st[n]=(st[n]||0)+1; };
+  const rec = k => D[k] || (D[k]={a:'',r:'',m:[]});
+  const gap = (a,b) => Math.round((parseKey(b)-parseKey(a))/86400000);
+  const isHoliday = k => { const a=(D[k]&&D[k].a)||''; return !!a && !/^[\d.]+$/.test(a) && /節|假|紀念日|國慶|光復/.test(a); };
+  const isWork = k => { const w=wdOf(k); return w>=1 && w<=5 && !isHoliday(k); };
+  const prevWork = k => { while(!isWork(k)) k=addDays(k,-1); return k; };
+  const nextWork = k => { while(!isWork(k)) k=addDays(k,1); return k; };
+  const near = (k,part,field,span) => {
+    for(let i=-span;i<=span;i++){
+      const r=D[addDays(k,i)]; if(!r) continue;
+      if((field==='r' ? r.r : r.m.join('\n')).includes(part)) return true;
+    }
+    return false;
+  };
+  const addR = (k,line,part,span,type,nom) => {
+    if(k<start||k>end||near(nom||k,part,'r',span)) return;
+    const r=rec(k); r.r = r.r ? r.r+'\n'+line : line; bump(type);
+  };
+  const addM = (k,text,part,span,type) => {
+    if(k<start||k>end||near(k,part,'m',span)) return;
+    const r=rec(k), i=r.m.findIndex(c=>!c.trim());
+    if(i<0) r.m.push(text); else r.m[i]=text;
+    bump(type);
+  };
+  const lastOcc = (re,before) => {
+    let best=null;
+    Object.keys(D).sort().forEach(k=>{
+      if(before && k>=before) return;
+      D[k].m.forEach(c=>{ const m=c.match(re); if(m) best={k,num:+m[1]}; });
+    });
+    return best;
+  };
+  const eachDay = fn => { for(let k=start;k<=end;k=addDays(k,1)) fn(k,wdOf(k)); };
+  const months = [];
+  { let [y,m]=start.slice(0,7).split('-').map(Number); const e=end.slice(0,7);
+    for(;;){ const ym=`${y}-${pad(m)}`; if(ym>e) break; months.push(ym); if(++m>12){ m=1; y++; } } }
+  const monthLast = ym => { const [y,m]=ym.split('-').map(Number); return key(y,m,new Date(y,m,0).getDate()); };
+
+  /* ---- 報表欄 ---- */
+  eachDay((k,w)=>{
+    const due = k2 => isHoliday(k2) ? prevWork(k2) : k2;
+    if(w===4){   // 每週四
+      const d=due(k);
+      addR(d,'局長參考資料(局長版)(每週四上午9時，群組下載更新回傳)','局長參考資料',3,'週四報表',k);
+      addR(d,'局務會議列管案件(每週四上午9時，群組下載更新回傳)','局務會議列管案件',3,'週四報表',k);
+      addR(d,'週報(週進度會議，每週四上午9時提交彩色紙本不要釘+電子檔)','週報(週進度會議',3,'週四報表',k);
+      if(gap('2026-10-01',k)%14===0) addR(d,'土地公重大工程表(每雙周LINE下載)','土地公重大工程表',3,'雙週四報表',k);
+    }
+    if(w===5){   // 每週五
+      const d=due(k);
+      addR(d,'工程進度(黑色群組)+雙週大事紀>>給運動局','雙週大事紀>>給運動局',3,'週五報表',k);
+      addR(d,'麗明-逸弘>>每周工程里程碑','每周工程里程碑',3,'週五報表',k);
+    }
+    if(w===3 && gap('2026-09-09',k)%14===0)   // 雙週三
+      addR(due(k),'應辦事項進度管控表(每雙週三上午9時提交雙面黑白紙本不要釘)','應辦事項進度管控表',3,'雙週三報表',k);
+  });
+  months.forEach(ym=>{
+    const [y,m]=ym.split('-').map(Number);
+    const D1=nextWork(monthLast(ym));                    // 月底（遇假日順延）
+    const m2=m===12?1:m+1, y2=m===12?y+1:y;
+    addR(D1,`府標管系統${m}月份進度填報(工程會系統由品均辦理)`,`府標管系統${m}月份`,6,'月底報表');
+    addR(D1,`新工處府局處一層會議紀錄簽辦管控明細表-${m}月份`,`明細表-${m}月份`,6,'月底報表');
+    addR(D1,`工程履約應注意事項-${m2}月份(麗明兩週星期一交一次)`,`應注意事項-${m2}月份`,6,'月底報表');
+    addR(D1,`${y2-1911}年度在建工程執行督導統計表${m2}月`,`統計表${m2}月`,6,'月底報表');
+    const d10=prevWork(key(y,m,9));                     // 每月10日
+    const has=Object.keys(D).some(k=>k.startsWith(ym) && D[k].r.includes('設計階段應辦事項檢核表'));
+    if(!has) addR(d10,'設計階段應辦事項檢核表(每月10日)','設計階段應辦事項檢核表',0,'每月10日報表');
+  });
+
+  /* ---- 會議欄 ---- */
+  const wk=lastOcc(/第\s*(\d+)\s*次週會/,start), tc=lastOcc(/第\s*(\d+)\s*次專業技術協調會議/,start);
+  if(wk && tc){                                         // 每週三 週會＋專技
+    let n=wk.num, t=tc.num;
+    for(let k=addDays(wk.k,7);k<=end;k=addDays(k,7)){
+      if(isHoliday(k)) continue;
+      n++; t++;
+      addM(k,`上午9:00第${n}次週會、第${t}次專業技術協調會議`,'週會',0,'週會＋專技');
+    }
+  }
+  const biweekly = (re,build,part,type,fromAll,step) => {
+    const b=lastOcc(re,fromAll?null:start); if(!b) return;
+    let n=b.num;
+    for(let k=addDays(b.k,step||14);k<=end;k=addDays(k,step||14)){
+      n++;
+      addM(k,build(n),part,3,type);
+    }
+  };
+  biweekly(/第\s*(\d+)\s*次進度會議/, n=>`第${n}次進度會議(新工陳處長)`, '進度會議','進度會議',false);
+  biweekly(/第\s*(\d+)\s*次專管督導/, n=>`第${n}次專管督導(雙周)`, '專管督導','專管督導',false);
+  biweekly(/第\s*(\d+)\s*次機關督導/, n=>`第${n}次機關督導(陳股)9:00`, '機關督導','機關督導',true);
+  months.forEach(ym=>{                                  // 月會：每月最後一個週三
+    const [y,m]=ym.split('-').map(Number);
+    let k=monthLast(ym); while(wdOf(k)!==3) k=addDays(k,-1);
+    if(Object.keys(D).some(x=>x.startsWith(ym) && D[x].m.join('\n').includes('月會'))) return;
+    addM(k,`${m}月份月會`,'月會',0,'月會');
+  });
+
+  /* ---- 周次（只接續最後一個編號，補在上班日） ---- */
+  let lastNum=0, lastKey='';
+  Object.keys(D).sort().forEach(k=>{ if(/^\d+(\.\d+)?$/.test(D[k].a)){ lastNum=Math.round(+D[k].a); lastKey=k; } });
+  if(lastKey) for(let k=addDays(lastKey,1);k<=end;k=addDays(k,1)){
+    if(isWork(k) && !(D[k]&&D[k].a)){ lastNum++; rec(k).a=String(lastNum); bump('周次編號'); }
+  }
+  return st;
+}
+/* AF-END */
+
 /* ---------- 資料 ---------- */
-// days = { 'YYYY-MM-DD': {a:'周次', r:'報表', m:'會議（一行一格）'} }，只存有內容的日子
+// days = { 'YYYY-MM-DD': {a:'周次／假別', r:'報表', m:['會議E','會議F',…]} }，只存有內容的日子
 let days = {};
-try{ days = JSON.parse(store.get('jd_days','{}')) || {}; }catch(e){ days = {}; }
+try{ days = normDays(JSON.parse(store.get('jd_days','{}')) || {}); }catch(e){ days = {}; }
+let mcolsN = Math.max(4, +store.get('jd_mcols','4') || 4);
+const mcols = () => Math.max(mcolsN, ...Object.values(days).map(r=>r.m.length));
 
 let saveT;
 function saveSoon(){
@@ -210,51 +337,54 @@ function saveSoon(){
     if(!$('p2').hidden) gen();
   },300);
 }
-function setDay(k,f,v){
-  const d = days[k] || (days[k]={a:'',r:'',m:''});
-  d[f]=v;
-  if(!d.a && !d.r && !d.m.trim()) delete days[k];
+function setCell(k,c,v){
+  const d = days[k] || (days[k]={a:'',r:'',m:[]});
+  if(c===0) d.a=v;
+  else if(c===3) d.r=v;
+  else{ const i=c-4; while(d.m.length<=i) d.m.push(''); d.m[i]=v; while(d.m.length && !d.m[d.m.length-1].trim()) d.m.pop(); }
+  if(isEmptyRec(d)) delete days[k];
   saveSoon();
 }
 
-/* ---------- 行事曆畫面 ---------- */
+/* ---------- 行事曆畫面（Excel 樣式） ---------- */
+const hx = t => String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const COLW = [96,96,70,440,300,260,320,280];
+function sheetRange(){
+  const ks=Object.keys(days).sort(); let a='2026-03-01', b='2026-12-31';
+  if(ks.length){ if(ks[0]<a) a=ks[0]; if(ks[ks.length-1]>b) b=ks[ks.length-1]; }
+  return [a,b];
+}
 function fit(ta){ ta.style.height='auto'; ta.style.height=(ta.scrollHeight+2)+'px'; }
+const NATIVE_FIT = !!(window.CSS && CSS.supports && CSS.supports('field-sizing','content'));
 
 function renderCal(){
-  const [y,mo] = $('month').value.split('-').map(Number);
-  const n = new Date(y,mo,0).getDate();
-  const only = $('onlyFilled').checked, today = todayKey();
-  const box = $('cal'); box.innerHTML='';
-  let shown = 0;
-  for(let d=1; d<=n; d++){
-    const k = key(y,mo,d), rec = days[k], w = wdOf(k);
-    if(only && !(rec && (rec.m||rec.r))) continue;
-    shown++;
-    const row = document.createElement('div');
-    row.className = 'day' + ((w===0||w===6)?' we':'') + (k===today?' today':'');
-    const dh = document.createElement('div'); dh.className='dh';
-    dh.innerHTML = `<b>${pad(mo)}/${pad(d)}</b><span>週${WD[w]}</span>` + (k===today?'<i>今天</i>':'');
-    const mk = (label,field,ph)=>{
-      const wrap=document.createElement('div');
-      const lb=document.createElement('label'); lb.textContent=label;
-      const ta=document.createElement('textarea'); ta.rows=1; ta.placeholder=ph; ta.value=(rec&&rec[field])||'';
-      ta.addEventListener('input',()=>{ setDay(k,field,ta.value); fit(ta); });
-      wrap.append(lb,ta); return {wrap,ta};
-    };
-    const m = mk('會議（一行一格）','m','例：上午9:00第145次週會、第359次專業技術協調會議');
-    const r = mk('報表／備註','r','');
-    row.append(dh,m.wrap,r.wrap);
-    box.appendChild(row);
-    fit(m.ta); fit(r.ta);
+  const box=$('cal'), keep=box.scrollTop;
+  const nm=mcols(), [a,b]=sheetRange(), today=todayKey();
+  const widths=Array.from({length:4+nm},(_,i)=>COLW[i]||280);
+  let h=`<table id="sheet" style="width:${widths.reduce((x,y)=>x+y,0)}px"><colgroup>${widths.map(w=>`<col style="width:${w}px">`).join('')}</colgroup>`
+      + `<thead><tr><th>周次</th><th>日期</th><th>星期</th><th>報表</th>${'<th>會議</th>'.repeat(nm)}</tr></thead><tbody>`;
+  for(let k=a;k<=b;k=addDays(k,1)){
+    const rec=days[k]||{a:'',r:'',m:[]}, dt=parseKey(k);
+    h+=`<tr data-k="${k}"><td><textarea rows="1" data-c="0">${hx(rec.a)}</textarea></td>`
+     + `<td class="dt${k===today?' today':''}">${dt.getFullYear()}/${dt.getMonth()+1}/${dt.getDate()}</td><td class="wd">星期${WD[dt.getDay()]}</td>`
+     + `<td><textarea rows="1" data-c="3">${hx(rec.r)}</textarea></td>`;
+    for(let i=0;i<nm;i++) h+=`<td><textarea rows="1" data-c="${4+i}">${hx(rec.m[i]||'')}</textarea></td>`;
+    h+='</tr>';
   }
-  if(!shown) box.innerHTML = `<div class="empty">${only?'這個月還沒有任何內容。':'沒有日期。'}<br>${Object.keys(days).length?'':'還沒有資料，可按上方「匯入 Excel」帶入現有的行事曆分頁。'}</div>`;
+  box.innerHTML=h+'</tbody></table>';
+  if(!NATIVE_FIT) box.querySelectorAll('textarea').forEach(fit);
+  box.scrollTop=keep;
 }
-
-function setMonth(v){ $('month').value=v; store.set('jd_month',v); renderCal(); }
-function shiftMonth(delta){
-  const [y,m]=$('month').value.split('-').map(Number);
-  const d=new Date(y,m-1+delta,1); setMonth(`${d.getFullYear()}-${pad(d.getMonth()+1)}`);
+$('cal').addEventListener('input',e=>{
+  const ta=e.target; if(ta.tagName!=='TEXTAREA') return;
+  setCell(ta.closest('tr').dataset.k, +ta.dataset.c, ta.value);
+  if(!NATIVE_FIT) fit(ta);
+});
+function scrollToKey(k){
+  const box=$('cal'), tr=box.querySelector(`tr[data-k="${k}"]`); if(!tr) return;
+  box.scrollTop = tr.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop - box.querySelector('thead').offsetHeight;
 }
+function setMonth(v){ $('month').value=v; store.set('jd_month',v); scrollToKey(v+'-01'); }
 
 /* ---------- Excel 匯入／匯出 ---------- */
 function serialToKey(v){
@@ -273,12 +403,10 @@ function importWorkbook(wb){
     const k = serialToKey(r[1]);
     if(!k) return;
     const txt = v => (typeof v==='number' ? String(Math.round(v*100)/100) : String(v==null?'':v)).replace(/\r/g,'').trim();
-    const rec = {
-      a: txt(r[0]),
-      r: txt(r[3]),
-      m: r.slice(4).map(txt).filter(Boolean).join('\n')
-    };
-    if(rec.a || rec.r || rec.m){ out[k]=rec; cnt++; }
+    const cells = r.slice(4).map(txt);
+    while(cells.length && !cells[cells.length-1]) cells.pop();
+    const rec = { a: txt(r[0]), r: txt(r[3]), m: cells };
+    if(rec.a || rec.r || rec.m.length){ out[k]=rec; cnt++; }
   });
   return {days:out, count:cnt, sheet:name};
 }
@@ -294,21 +422,23 @@ async function doImport(file){
     days = res.days; store.set('jd_days',JSON.stringify(days)); touch();
     renderCal(); if(!$('p2').hidden) gen();
     $('saveStatus').textContent = `已匯入「${res.sheet}」${res.count} 天資料`;
+    const t0=todayKey(), e0='2026-12-31';
+    if(t0<e0 && confirm(`已匯入。要順便把固定的會議與報表自動帶入到 115/12/31 嗎？\n（只補空白、不改您寫的內容，之後可按「自動帶入固定事項」→「復原」）`)) runAF(t0,e0);
   }catch(e){ alert('讀取失敗：'+(e.message||e)); }
 }
 
 function buildRows(keys){
-  const maxM = Math.max(1, ...keys.map(k=>days[k]?days[k].m.split('\n').filter(s=>s.trim()).length:0));
-  const head = ['周次','日期','星期','報表'].concat(Array.from({length:maxM},()=>'會議'));
+  const nm=mcols();
+  const head = ['周次','日期','星期','報表'].concat(Array.from({length:nm},()=>'會議'));
   const rows = keys.map(k=>{
-    const rec = days[k]||{a:'',r:'',m:''};
-    return {k, cells:[rec.a,null,'星期'+WD[wdOf(k)],rec.r].concat(rec.m.split('\n').filter(s=>s.trim()))};
+    const rec = days[k]||{a:'',r:'',m:[]}, m=rec.m.slice();
+    while(m.length<nm) m.push('');
+    return {k, cells:[/^\d+(\.\d+)?$/.test(rec.a)?Number(rec.a):rec.a,null,'星期'+WD[wdOf(k)],rec.r].concat(m)};
   });
   return {head,rows};
 }
 function allKeysContinuous(){
-  const ks=Object.keys(days).sort(); if(!ks.length) return [];
-  const out=[]; for(let k=ks[0]; k<=ks[ks.length-1]; k=addDays(k,1)) out.push(k);
+  const [a,b]=sheetRange(), out=[]; for(let k=a;k<=b;k=addDays(k,1)) out.push(k);
   return out;
 }
 
@@ -448,11 +578,11 @@ function noiseRe(){
 function collect(){
   const re=noiseRe(), items=[], excluded=[];
   Object.keys(days).sort().forEach(k=>{
-    (days[k].m||'').split('\n').forEach(line=>{
+    mcellsOf(days[k]).forEach(cell=>String(cell).split('\n').forEach(line=>{
       line=line.trim(); if(!line) return;
       if(re && re.test(line)){ excluded.push({k,raw:line}); return; }
       parseCell(line,k).forEach(it=>items.push(it));
-    });
+    }));
   });
   return {items,excluded};
 }
@@ -560,12 +690,27 @@ function setPane(n){
   $('t1').setAttribute('aria-pressed',n===1); $('t2').setAttribute('aria-pressed',n===2); $('t3').setAttribute('aria-pressed',n===3);
   store.set('jd_pane',String(n));
   if(n===2) gen();
+  if(n===1) requestAnimationFrame(()=>{ if(!window._sc){ window._sc=1; scrollToKey(addDays(todayKey(),-1)); } });
 }
 $('t1').onclick=()=>setPane(1); $('t2').onclick=()=>setPane(2); $('t3').onclick=()=>setPane(3);
 $('month').addEventListener('change',()=>{ if($('month').value) setMonth($('month').value); });
-$('prevM').onclick=()=>shiftMonth(-1); $('nextM').onclick=()=>shiftMonth(1);
-$('goToday').onclick=()=>{ const t=new Date(); setMonth(`${t.getFullYear()}-${pad(t.getMonth()+1)}`); };
-$('onlyFilled').addEventListener('change',renderCal);
+$('goToday').onclick=()=>{ const t=todayKey(); $('month').value=t.slice(0,7); scrollToKey(addDays(t,-1)); };
+$('btnAddCol').onclick=()=>{ mcolsN=mcols()+1; store.set('jd_mcols',String(mcolsN)); renderCal(); };
+let afBackup=null;
+function runAF(s,e){
+  afBackup=JSON.stringify(days);
+  const st=autoFillDays(days,s,e), n=Object.values(st).reduce((x,y)=>x+y,0);
+  store.set('jd_days',JSON.stringify(days)); touch(); renderCal(); if(!$('p2').hidden) gen();
+  $('afRes').textContent = n ? `已帶入 ${n} 項（${s.slice(5)}～${e.slice(5)}）：`+Object.entries(st).map(([k,v])=>`${k}${v}`).join('、') : '沒有需要補的項目（固定事項都已經填好了）';
+  $('afbox').hidden=false;
+}
+$('btnAF').onclick=()=>{ const b=$('afbox'); b.hidden=!b.hidden; if(!$('afS').value){ $('afS').value=todayKey(); $('afE').value='2026-12-31'; } };
+$('afGo').onclick=()=>{ const s=$('afS').value, e=$('afE').value; if(!s||!e||s>e){ $('afRes').textContent='請選好起訖日期'; return; } runAF(s,e); };
+$('afUndo').onclick=()=>{
+  if(!afBackup){ $('afRes').textContent='沒有可復原的帶入紀錄'; return; }
+  days=normDays(JSON.parse(afBackup)); afBackup=null; store.set('jd_days',JSON.stringify(days)); touch(); renderCal();
+  $('afRes').textContent='已復原上一次帶入';
+};
 $('btnImport').onclick=()=>$('file').click();
 $('file').addEventListener('change',e=>{ doImport(e.target.files[0]); e.target.value=''; });
 $('btnExport').onclick=doExport;
@@ -654,7 +799,7 @@ async function gPush(){
   store.set('jd_last',String(mod));
 }
 function takeRemote(rem){
-  days=rem.days||{}; store.set('jd_days',JSON.stringify(days));
+  days=normDays(rem.days||{}); store.set('jd_days',JSON.stringify(days));
   if(rem.noise!=null){ $('noise').value=rem.noise; store.set('jd_noise',rem.noise); }
   if(rem.gap!=null){ $('gap').value=rem.gap; store.set('jd_gap',rem.gap); }
   store.set('jd_mod',String(rem.updated)); store.set('jd_last',String(rem.updated));
@@ -671,7 +816,7 @@ async function syncNow(){
     if(!rem){ if(hasLocal) await gPush(); }
     else if(rem.updated===last){ if(mod>last) await gPush(); }
     else if(!hasLocal){ takeRemote(rem); msg='已從 Google 載入行事曆'; }
-    else if(JSON.stringify(rem.days)===JSON.stringify(days)){ store.set('jd_mod',String(rem.updated)); store.set('jd_last',String(rem.updated)); }
+    else if(JSON.stringify(normDays(JSON.parse(JSON.stringify(rem.days||{}))))===JSON.stringify(days)){ store.set('jd_mod',String(rem.updated)); store.set('jd_last',String(rem.updated)); }
     else if(mod>last){
       if(confirm('Google 雲端與這台電腦的行事曆內容不同。\n\n按「確定」＝用雲端版本取代這台電腦的內容\n按「取消」＝用這台電腦的內容覆蓋雲端')){ takeRemote(rem); msg='已從 Google 載入行事曆'; }
       else{ store.set('jd_mod',String(Date.now())); await gPush(); msg='已用這台的內容覆蓋雲端'; }
