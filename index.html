@@ -94,7 +94,7 @@ details summary{cursor:pointer;color:var(--sub);font-size:13px;margin-top:6px}
     </div>
     <div class="notes" id="afbox" hidden style="margin:0 0 10px">
       <h3>自動帶入固定會議／報表</h3>
-      <p class="hint" style="margin:0 0 6px">只補「空白」，不會改到您已經寫的內容。帶入：每週四／週五、雙週三／四報表，月底報表、每月10日報表；每週三週會＋專技（屆次接續）、雙週進度會議、專管督導、機關督導、月會；周次編號。BIM 會議沒有固定週期，不會帶入。</p>
+      <p class="hint" style="margin:0 0 6px">只補「空白」，不會改到您已經寫的內容。帶入：每週四／週五、雙週三／四報表，月底報表、每月10日報表；每週三週會＋專技（屆次接續）、雙週進度會議、專管督導、機關督導、月會。BIM 會議沒有固定週期，不會帶入。</p>
       <div class="row2" style="max-width:420px">
         <div><label for="afS" style="margin-top:0">從</label><input type="date" id="afS"></div>
         <div><label for="afE" style="margin-top:0">到</label><input type="date" id="afE"></div>
@@ -205,7 +205,7 @@ const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 const mcellsOf = rec => Array.isArray(rec.m) ? rec.m : (rec.m ? String(rec.m).split('\n') : []);
 function normDays(o){
   Object.values(o).forEach(r=>{
-    r.a = r.a==null ? '' : String(r.a); r.r = r.r || '';
+    r.a = r.a==null ? '' : String(r.a).trim(); if(/^[\d.]+$/.test(r.a)) r.a=''; r.r = r.r || '';
     r.m = mcellsOf(r).map(x=>x==null?'':String(x));
     while(r.m.length && !r.m[r.m.length-1].trim()) r.m.pop();
   });
@@ -218,7 +218,7 @@ function autoFillDays(D, start, end){
   const bump = n => { st[n]=(st[n]||0)+1; };
   const rec = k => D[k] || (D[k]={a:'',r:'',m:[]});
   const gap = (a,b) => Math.round((parseKey(b)-parseKey(a))/86400000);
-  const isHoliday = k => { const a=(D[k]&&D[k].a)||''; return !!a && !/^[\d.]+$/.test(a) && /節|假|紀念日|國慶|光復/.test(a); };
+  const isHoliday = k => { const a=(D[k]&&D[k].a)||'', r=(D[k]&&D[k].r)||''; return (!!a && !/^[\d.]+$/.test(a) && /節|假|紀念日|國慶|光復/.test(a)) || /^\s*(清明連假|勞動節|端午節|中秋節|春節|除夕|元旦|補假|放假)\s*$/m.test(r); };
   const isWork = k => { const w=wdOf(k); return w>=1 && w<=5 && !isHoliday(k); };
   const prevWork = k => { while(!isWork(k)) k=addDays(k,-1); return k; };
   const nextWork = k => { while(!isWork(k)) k=addDays(k,1); return k; };
@@ -312,12 +312,6 @@ function autoFillDays(D, start, end){
     addM(k,`${m}月份月會`,'月會',0,'月會');
   });
 
-  /* ---- 周次（只接續最後一個編號，補在上班日） ---- */
-  let lastNum=0, lastKey='';
-  Object.keys(D).sort().forEach(k=>{ if(/^\d+(\.\d+)?$/.test(D[k].a)){ lastNum=Math.round(+D[k].a); lastKey=k; } });
-  if(lastKey) for(let k=addDays(lastKey,1);k<=end;k=addDays(k,1)){
-    if(isWork(k) && !(D[k]&&D[k].a)){ lastNum++; rec(k).a=String(lastNum); bump('周次編號'); }
-  }
   return st;
 }
 /* AF-END */
@@ -356,19 +350,37 @@ function sheetRange(){
   if(ks.length){ if(ks[0]<a) a=ks[0]; if(ks[ks.length-1]>b) b=ks[ks.length-1]; }
   return [a,b];
 }
-const isOffRec = (k,a) => { const w=wdOf(k); return w===0||w===6||(!!a && !/^[\d.]+$/.test(a) && /節|假|紀念日|國慶|光復|特休|補/.test(a)); };
+const HOLI_R = /^\s*(清明連假|勞動節|端午節|中秋節|春節|除夕|元旦|和平紀念日|兒童節|國慶日|光復節|行憲紀念日|補假|放假|特休|颱風假)\s*$/m;
+const isOffRec = (k,a,r) => { const w=wdOf(k); return w===0||w===6||(!!a && !/^[\d.]+$/.test(a) && /節|假|紀念日|國慶|光復|特休|補/.test(a))||(!!r && HOLI_R.test(r)); };
+// 工作日：從到職日 2026/3/2 起算到今天，週末與放假／特休不算，未來留白
+function calcWorkdays(){
+  const map={}, today=todayKey(); let n=0;
+  for(let k='2026-03-02'; k<=today; k=addDays(k,1)){
+    const rec=days[k]; if(isOffRec(k,rec?rec.a:'',rec?rec.r:'')) continue;
+    map[k]=++n;
+  }
+  return map;
+}
+function refreshNums(){
+  const wn=calcWorkdays();
+  document.querySelectorAll('#sheet tbody tr').forEach(tr=>{
+    const ta=tr.querySelector('textarea[data-c="0"]'); if(ta===document.activeElement) return;
+    const k=tr.dataset.k, rec=days[k];
+    ta.value=(rec&&rec.a)||(wn[k]||'');
+  });
+}
 function fit(ta){ ta.style.height='auto'; ta.style.height=(ta.scrollHeight+2)+'px'; }
 const NATIVE_FIT = !!(window.CSS && CSS.supports && CSS.supports('field-sizing','content'));
 
 function renderCal(){
   const box=$('cal'), keep=box.scrollTop;
-  const nm=mcols(), [a,b]=sheetRange(), today=todayKey();
+  const nm=mcols(), [a,b]=sheetRange(), today=todayKey(), wn=calcWorkdays();
   const widths=Array.from({length:4+nm},(_,i)=>COLW[i]||280);
   let h=`<table id="sheet" style="width:${widths.reduce((x,y)=>x+y,0)}px"><colgroup>${widths.map(w=>`<col style="width:${w}px">`).join('')}</colgroup>`
-      + `<thead><tr><th>周次</th><th>日期</th><th>星期</th><th>報表</th>${'<th>會議</th>'.repeat(nm)}</tr></thead><tbody>`;
+      + `<thead><tr><th>工作日</th><th>日期</th><th>星期</th><th>報表</th>${'<th>會議</th>'.repeat(nm)}</tr></thead><tbody>`;
   for(let k=a;k<=b;k=addDays(k,1)){
     const rec=days[k]||{a:'',r:'',m:[]}, dt=parseKey(k);
-    h+=`<tr data-k="${k}" class="${k===today?'today':isOffRec(k,rec.a)?'off':''}"><td><textarea rows="1" data-c="0">${hx(rec.a)}</textarea></td>`
+    h+=`<tr data-k="${k}" class="${k===today?'today':isOffRec(k,rec.a,rec.r)?'off':''}"><td><textarea rows="1" data-c="0">${hx(rec.a||wn[k]||'')}</textarea></td>`
      + `<td class="dt">${dt.getFullYear()}/${dt.getMonth()+1}/${dt.getDate()}</td><td class="wd">星期${WD[dt.getDay()]}</td>`
      + `<td><textarea rows="1" data-c="3">${hx(rec.r)}</textarea></td>`;
     for(let i=0;i<nm;i++) h+=`<td><textarea rows="1" data-c="${4+i}">${hx(rec.m[i]||'')}</textarea></td>`;
@@ -381,10 +393,21 @@ function renderCal(){
 $('cal').addEventListener('input',e=>{
   const ta=e.target; if(ta.tagName!=='TEXTAREA') return;
   const tr=ta.closest('tr'), k=tr.dataset.k;
-  setCell(k, +ta.dataset.c, ta.value);
-  if(+ta.dataset.c===0 && !tr.classList.contains('today')) tr.classList.toggle('off', isOffRec(k,ta.value));
+  if(+ta.dataset.c===0){
+    const v=ta.value.trim(), lab=/^[\d.]+$/.test(v)?'':v;
+    setCell(k,0,lab);
+    if(!tr.classList.contains('today')) tr.classList.toggle('off', isOffRec(k,lab,(days[k]||{}).r));
+    clearTimeout(refreshNums._t); refreshNums._t=setTimeout(refreshNums,500);
+  }else{
+    setCell(k, +ta.dataset.c, ta.value);
+    if(+ta.dataset.c===3){
+      if(!tr.classList.contains('today')) tr.classList.toggle('off', isOffRec(k,(days[k]||{}).a,ta.value));
+      clearTimeout(refreshNums._t); refreshNums._t=setTimeout(refreshNums,500);
+    }
+  }
   if(!NATIVE_FIT) fit(ta);
 });
+$('cal').addEventListener('focusout',e=>{ if(e.target.dataset&&e.target.dataset.c==='0') refreshNums(); });
 function scrollToKey(k){
   const box=$('cal'), tr=box.querySelector(`tr[data-k="${k}"]`); if(!tr) return;
   box.scrollTop = tr.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop - box.querySelector('thead').offsetHeight;
@@ -410,7 +433,8 @@ function importWorkbook(wb){
     const txt = v => (typeof v==='number' ? String(Math.round(v*100)/100) : String(v==null?'':v)).replace(/\r/g,'').trim();
     const cells = r.slice(4).map(txt);
     while(cells.length && !cells[cells.length-1]) cells.pop();
-    const rec = { a: txt(r[0]), r: txt(r[3]), m: cells };
+    const a0 = txt(r[0]);
+    const rec = { a: /^[\d.]+$/.test(a0) ? '' : a0, r: txt(r[3]), m: cells };
     if(rec.a || rec.r || rec.m.length){ out[k]=rec; cnt++; }
   });
   return {days:out, count:cnt, sheet:name};
@@ -433,12 +457,12 @@ async function doImport(file){
 }
 
 function buildRows(keys){
-  const nm=mcols();
-  const head = ['周次','日期','星期','報表'].concat(Array.from({length:nm},()=>'會議'));
+  const nm=mcols(), wn=calcWorkdays();
+  const head = ['工作日','日期','星期','報表'].concat(Array.from({length:nm},()=>'會議'));
   const rows = keys.map(k=>{
     const rec = days[k]||{a:'',r:'',m:[]}, m=rec.m.slice();
     while(m.length<nm) m.push('');
-    return {k, cells:[/^\d+(\.\d+)?$/.test(rec.a)?Number(rec.a):rec.a,null,'星期'+WD[wdOf(k)],rec.r].concat(m)};
+    return {k, cells:[rec.a||wn[k]||'',null,'星期'+WD[wdOf(k)],rec.r].concat(m)};
   });
   return {head,rows};
 }
