@@ -50,6 +50,14 @@ button.ghost:hover{border-color:var(--accent)}
   padding:4px 6px;font:inherit;line-height:1.4;resize:none;overflow:hidden;field-sizing:content}
 #sheet textarea:focus{outline:2px solid var(--accent);outline-offset:-2px;background:#fffef0}
 #p2,#p3{max-width:1100px}
+#rules{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+#rules th{font-weight:700;text-align:left;border-bottom:2px solid #000;padding:4px 4px;white-space:nowrap}
+#rules td{border-bottom:1px solid #d0d0d0;padding:3px 3px;vertical-align:top}
+#rules input[type=text],#rules input[type=date],#rules input[type=number],#rules select{padding:4px 6px;border-radius:6px;font-size:13px;width:auto}
+#rules td:nth-child(3){width:42%}
+#rules input[data-k=t]{width:100%;min-width:340px}
+#rules .sub{display:flex;gap:4px;flex-wrap:wrap}
+#rulesbox{overflow-x:auto}
 /* 雙週大事紀 */
 .grid{display:grid;grid-template-columns:minmax(0,320px) minmax(0,1fr);gap:16px;align-items:start}
 @media(max-width:820px){.grid{grid-template-columns:1fr}}
@@ -93,9 +101,12 @@ details summary{cursor:pointer;color:var(--sub);font-size:13px;margin-top:6px}
       <input type="file" id="file" accept=".xlsx,.xlsm,.xls" hidden>
     </div>
     <div class="notes" id="afbox" hidden style="margin:0 0 10px">
-      <h3>自動帶入固定會議／報表</h3>
-      <p class="hint" style="margin:0 0 6px">只補「空白」，不會改到您已經寫的內容。帶入：每週四／週五、雙週三／四報表，月底報表、每月10日報表；每週三週會＋專技（屆次接續）、雙週進度會議、專管督導、機關督導、月會。BIM 會議沒有固定週期，不會帶入。</p>
-      <div class="row2" style="max-width:420px">
+      <h3>固定會議／報表（自動帶入）</h3>
+      <p class="hint" style="margin:0 0 4px">下面的清單就是帶入的規則，可以改名稱、週期，也可以新增或刪除；改完按「帶入」會依清單補進日曆（只補空白，不改您已寫的內容）。</p>
+      <p class="hint" style="margin:0 0 6px">內容可用：<b>{n}</b>＝自動接續的屆次、<b>{m}</b>＝當月、<b>{m2}</b>＝下個月、<b>{y2}</b>＝下個月的民國年。一格要放多場會議時用「、」隔開（每個 {n} 各自接續屆次）。</p>
+      <div id="rulesbox"><table id="rules"><thead><tr><th>啟用</th><th>放在</th><th>內容</th><th>週期</th><th>細節</th><th>遇放假</th><th></th></tr></thead><tbody></tbody></table></div>
+      <div class="btnrow"><button class="ghost" id="ruleAdd">＋新增一列</button><button class="ghost" id="ruleReset">恢復預設清單</button></div>
+      <div class="row2" style="max-width:420px;margin-top:10px">
         <div><label for="afS" style="margin-top:0">從</label><input type="date" id="afS"></div>
         <div><label for="afE" style="margin-top:0">到</label><input type="date" id="afE"></div>
       </div>
@@ -201,11 +212,12 @@ const md = k => `${pad(+k.slice(5,7))}/${pad(+k.slice(8,10))}`;
 const todayKey = () => keyOf(new Date());
 const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 
-/* AF-START 固定會議／報表自動帶入（只補空白，不覆蓋既有內容） */
+/* AF-START 固定會議／報表自動帶入（依「固定事項清單」規則；只補空白，不覆蓋既有內容） */
 const mcellsOf = rec => Array.isArray(rec.m) ? rec.m : (rec.m ? String(rec.m).split('\n') : []);
 function normDays(o){
   Object.values(o).forEach(r=>{
-    r.a = r.a==null ? '' : String(r.a).trim(); if(/^[\d.]+$/.test(r.a)) r.a=''; r.r = r.r || '';
+    r.a = r.a==null ? '' : String(r.a).trim(); if(/^[\d.]+$/.test(r.a)) r.a='';
+    r.r = r.r || '';
     r.m = mcellsOf(r).map(x=>x==null?'':String(x));
     while(r.m.length && !r.m[r.m.length-1].trim()) r.m.pop();
   });
@@ -213,32 +225,82 @@ function normDays(o){
 }
 const isEmptyRec = r => !r.a && !r.r && !r.m.some(x=>x.trim());
 
-function autoFillDays(D, start, end){
+// 規則欄位：on 啟用／f r=報表 m=會議／t 內容／c 週期(w1 每週,w2~w4 每N週,mlast 每月最後一個週X,mday 每月固定日,mend 每月底)
+//          wd 星期／a 起算日(每N週其中一次)／day 每月幾日／d 假日處理(prev 前一個上班日,next 後一個上班日,none 不調整,skip 跳過)
+//          nm 屆次接續(before 起算日前最後一次,last 日曆上最後一次)／sn 找不到歷史時的起始屆次
+const DEFAULT_RULES = [
+  {on:1,f:'r',t:'局長參考資料(局長版)(每週四上午9時，群組下載更新回傳)',c:'w1',wd:4,d:'prev'},
+  {on:1,f:'r',t:'局務會議列管案件(每週四上午9時，群組下載更新回傳)',c:'w1',wd:4,d:'prev'},
+  {on:1,f:'r',t:'週報(週進度會議，每週四上午9時提交彩色紙本不要釘+電子檔)',c:'w1',wd:4,d:'prev'},
+  {on:1,f:'r',t:'土地公重大工程表(每雙周LINE下載)',c:'w2',wd:4,a:'2026-10-01',d:'prev'},
+  {on:1,f:'r',t:'工程進度(黑色群組)+雙週大事紀>>給運動局',c:'w1',wd:5,d:'prev'},
+  {on:1,f:'r',t:'麗明-逸弘>>每周工程里程碑',c:'w1',wd:5,d:'prev'},
+  {on:1,f:'r',t:'應辦事項進度管控表(每雙週三上午9時提交雙面黑白紙本不要釘)',c:'w2',wd:3,a:'2026-09-09',d:'prev'},
+  {on:1,f:'r',t:'府標管系統{m}月份進度填報(工程會系統由品均辦理)',c:'mend',d:'next'},
+  {on:1,f:'r',t:'新工處府局處一層會議紀錄簽辦管控明細表-{m}月份',c:'mend',d:'next'},
+  {on:1,f:'r',t:'工程履約應注意事項-{m2}月份(麗明兩週星期一交一次)',c:'mend',d:'next'},
+  {on:1,f:'r',t:'{y2}年度在建工程執行督導統計表{m2}月',c:'mend',d:'next'},
+  {on:1,f:'r',t:'設計階段應辦事項檢核表(每月10日)',c:'mday',day:9,d:'prev'},
+  {on:1,f:'m',t:'上午9:00第{n}次週會、第{n}次專業技術協調會議',c:'w1',wd:3,d:'skip',nm:'before',sn:1},
+  {on:1,f:'m',t:'第{n}次進度會議(新工陳處長)',c:'w2',wd:4,a:'2026-10-08',d:'skip',nm:'before',sn:1},
+  {on:1,f:'m',t:'第{n}次專管督導(雙周)',c:'w2',wd:2,a:'2026-10-13',d:'skip',nm:'before',sn:1},
+  {on:1,f:'m',t:'第{n}次機關督導(陳股)9:00',c:'w2',wd:4,a:'2026-10-29',d:'skip',nm:'last',sn:1},
+  {on:1,f:'m',t:'{m}月份月會',c:'mlast',wd:3,d:'none'}
+];
+
+function autoFillDays(D, start, end, rules){
   const st = {};
   const bump = n => { st[n]=(st[n]||0)+1; };
   const rec = k => D[k] || (D[k]={a:'',r:'',m:[]});
   const gap = (a,b) => Math.round((parseKey(b)-parseKey(a))/86400000);
   const isHoliday = k => { const a=(D[k]&&D[k].a)||'', r=(D[k]&&D[k].r)||''; return (!!a && !/^[\d.]+$/.test(a) && /節|假|紀念日|國慶|光復/.test(a)) || /^\s*(清明連假|勞動節|端午節|中秋節|春節|除夕|元旦|補假|放假)\s*$/m.test(r); };
   const isWork = k => { const w=wdOf(k); return w>=1 && w<=5 && !isHoliday(k); };
-  const prevWork = k => { while(!isWork(k)) k=addDays(k,-1); return k; };
-  const nextWork = k => { while(!isWork(k)) k=addDays(k,1); return k; };
-  const near = (k,part,field,span) => {
-    for(let i=-span;i<=span;i++){
-      const r=D[addDays(k,i)]; if(!r) continue;
-      if((field==='r' ? r.r : r.m.join('\n')).includes(part)) return true;
+  const prevWork = k => { for(let i=0;i<30&&!isWork(k);i++) k=addDays(k,-1); return k; };
+  const nextWork = k => { for(let i=0;i<30&&!isWork(k);i++) k=addDays(k,1); return k; };
+  const text = (r,f) => f==='r' ? r.r : r.m.join('\n');
+  const near = (k,part,f,span) => { for(let i=-span;i<=span;i++){ const r=D[addDays(k,i)]; if(r && text(r,f).includes(part)) return true; } return false; };
+  const monthHas = (ym,part,f) => Object.keys(D).some(k=>k.startsWith(ym) && text(D[k],f).includes(part));
+  const monthLast = ym => { const [y,m]=ym.split('-').map(Number); return key(y,m,new Date(y,m,0).getDate()); };
+  const ymAdd = (ym,n) => { const [y,m]=ym.split('-').map(Number), d=new Date(y,m-1+n,1); return `${d.getFullYear()}-${pad(d.getMonth()+1)}`; };
+  const place = (k,f,t) => {
+    const r=rec(k);
+    if(f==='r') r.r = r.r ? r.r+'\n'+t : t;
+    else{ const i=r.m.findIndex(c=>!c.trim()); if(i<0) r.m.push(t); else r.m[i]=t; }
+  };
+
+  // 規則 → 在 [lo,hi] 之間的發生日（已套用假日處理）：[{k, ym}]，ym＝所屬月份（月底類為被結算的那個月）
+  const occurrences = (r,lo,hi) => {
+    const out=[], push=(k,ym)=>{
+      const nom=k;
+      if(!isWork(k) && r.d!=='none'){
+        if(r.d==='skip') return;
+        k = r.d==='next' ? nextWork(k) : prevWork(k);
+      }
+      if(k>=lo && k<=hi) out.push({k,nom,ym:ym||k.slice(0,7)});
+    };
+    const wd = r.wd==null ? 3 : +r.wd;
+    if(/^w\d$/.test(r.c)){
+      const N=+r.c.slice(1)||1;
+      for(let k=addDays(lo,-7);k<=addDays(hi,7);k=addDays(k,1)){
+        if(wdOf(k)!==wd) continue;
+        if(N>1 && r.a && (Math.round(gap(r.a,k)/7)%N+N)%N!==0) continue;
+        push(k);
+      }
+    }else{
+      for(let ym=ymAdd(lo.slice(0,7),-1); ym<=ymAdd(hi.slice(0,7),1); ym=ymAdd(ym,1)){
+        const [y,m]=ym.split('-').map(Number), len=new Date(y,m,0).getDate();
+        if(r.c==='mend') push(monthLast(ym),ym);
+        else if(r.c==='mday') push(key(y,m,Math.min(Math.max(+r.day||1,1),len)),ym);
+        else if(r.c==='mlast'){ let k=monthLast(ym); while(wdOf(k)!==wd) k=addDays(k,-1); push(k,ym); }
+      }
     }
-    return false;
+    return out.filter((o,i)=>out.findIndex(x=>x.k===o.k)===i).sort((a,b)=>a.k<b.k?-1:1);
   };
-  const addR = (k,line,part,span,type,nom) => {
-    if(k<start||k>end||near(nom||k,part,'r',span)) return;
-    const r=rec(k); r.r = r.r ? r.r+'\n'+line : line; bump(type);
-  };
-  const addM = (k,text,part,span,type) => {
-    if(k<start||k>end||near(k,part,'m',span)) return;
-    const r=rec(k), i=r.m.findIndex(c=>!c.trim());
-    if(i<0) r.m.push(text); else r.m[i]=text;
-    bump(type);
-  };
+
+  // 找歷史屆次：counterRe 以規則文字（去掉時間與括號）自動產生
+  const stripSeg = sg => sg.replace(/^\s*(上午|下午|早上|晚上)?\s*\d{1,2}\s*[:：]\s*\d{2}\s*/,'').replace(/[\(（][^)）]*[\)）]/g,'').replace(/\s*\d{1,2}\s*[:：]\s*\d{2}\s*$/,'').trim();
+  const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  const counterRe = sg => new RegExp(stripSeg(sg).split('{n}').map(reEsc).join('\\s*(\\d+)\\s*'));
   const lastOcc = (re,before) => {
     let best=null;
     Object.keys(D).sort().forEach(k=>{
@@ -247,71 +309,40 @@ function autoFillDays(D, start, end){
     });
     return best;
   };
-  const eachDay = fn => { for(let k=start;k<=end;k=addDays(k,1)) fn(k,wdOf(k)); };
-  const months = [];
-  { let [y,m]=start.slice(0,7).split('-').map(Number); const e=end.slice(0,7);
-    for(;;){ const ym=`${y}-${pad(m)}`; if(ym>e) break; months.push(ym); if(++m>12){ m=1; y++; } } }
-  const monthLast = ym => { const [y,m]=ym.split('-').map(Number); return key(y,m,new Date(y,m,0).getDate()); };
-
-  /* ---- 報表欄 ---- */
-  eachDay((k,w)=>{
-    const due = k2 => isHoliday(k2) ? prevWork(k2) : k2;
-    if(w===4){   // 每週四
-      const d=due(k);
-      addR(d,'局長參考資料(局長版)(每週四上午9時，群組下載更新回傳)','局長參考資料',3,'週四報表',k);
-      addR(d,'局務會議列管案件(每週四上午9時，群組下載更新回傳)','局務會議列管案件',3,'週四報表',k);
-      addR(d,'週報(週進度會議，每週四上午9時提交彩色紙本不要釘+電子檔)','週報(週進度會議',3,'週四報表',k);
-      if(gap('2026-10-01',k)%14===0) addR(d,'土地公重大工程表(每雙周LINE下載)','土地公重大工程表',3,'雙週四報表',k);
-    }
-    if(w===5){   // 每週五
-      const d=due(k);
-      addR(d,'工程進度(黑色群組)+雙週大事紀>>給運動局','雙週大事紀>>給運動局',3,'週五報表',k);
-      addR(d,'麗明-逸弘>>每周工程里程碑','每周工程里程碑',3,'週五報表',k);
-    }
-    if(w===3 && gap('2026-09-09',k)%14===0)   // 雙週三
-      addR(due(k),'應辦事項進度管控表(每雙週三上午9時提交雙面黑白紙本不要釘)','應辦事項進度管控表',3,'雙週三報表',k);
-  });
-  months.forEach(ym=>{
-    const [y,m]=ym.split('-').map(Number);
-    const D1=nextWork(monthLast(ym));                    // 月底（遇假日順延）
-    const m2=m===12?1:m+1, y2=m===12?y+1:y;
-    addR(D1,`府標管系統${m}月份進度填報(工程會系統由品均辦理)`,`府標管系統${m}月份`,6,'月底報表');
-    addR(D1,`新工處府局處一層會議紀錄簽辦管控明細表-${m}月份`,`明細表-${m}月份`,6,'月底報表');
-    addR(D1,`工程履約應注意事項-${m2}月份(麗明兩週星期一交一次)`,`應注意事項-${m2}月份`,6,'月底報表');
-    addR(D1,`${y2-1911}年度在建工程執行督導統計表${m2}月`,`統計表${m2}月`,6,'月底報表');
-    const d10=prevWork(key(y,m,9));                     // 每月10日
-    const has=Object.keys(D).some(k=>k.startsWith(ym) && D[k].r.includes('設計階段應辦事項檢核表'));
-    if(!has) addR(d10,'設計階段應辦事項檢核表(每月10日)','設計階段應辦事項檢核表',0,'每月10日報表');
-  });
-
-  /* ---- 會議欄 ---- */
-  const wk=lastOcc(/第\s*(\d+)\s*次週會/,start), tc=lastOcc(/第\s*(\d+)\s*次專業技術協調會議/,start);
-  if(wk && tc){                                         // 每週三 週會＋專技
-    let n=wk.num, t=tc.num;
-    for(let k=addDays(wk.k,7);k<=end;k=addDays(k,7)){
-      if(isHoliday(k)) continue;
-      n++; t++;
-      addM(k,`上午9:00第${n}次週會、第${t}次專業技術協調會議`,'週會',0,'週會＋專技');
-    }
-  }
-  const biweekly = (re,build,part,type,fromAll,step) => {
-    const b=lastOcc(re,fromAll?null:start); if(!b) return;
-    let n=b.num;
-    for(let k=addDays(b.k,step||14);k<=end;k=addDays(k,step||14)){
-      n++;
-      addM(k,build(n),part,3,type);
-    }
+  const partOf = (t,hasN) => {
+    const sg=t.split('、')[0].replace(/^\s*(上午|下午|早上|晚上)?\s*\d{1,2}\s*[:：]\s*\d{2}\s*/,'');
+    let p = hasN ? (sg.split('{n}')[1]||'') : sg;
+    p = p.split(/[\(（]/)[0].trim();
+    return p || sg.trim();
   };
-  biweekly(/第\s*(\d+)\s*次進度會議/, n=>`第${n}次進度會議(新工陳處長)`, '進度會議','進度會議',false);
-  biweekly(/第\s*(\d+)\s*次專管督導/, n=>`第${n}次專管督導(雙周)`, '專管督導','專管督導',false);
-  biweekly(/第\s*(\d+)\s*次機關督導/, n=>`第${n}次機關督導(陳股)9:00`, '機關督導','機關督導',true);
-  months.forEach(ym=>{                                  // 月會：每月最後一個週三
-    const [y,m]=ym.split('-').map(Number);
-    let k=monthLast(ym); while(wdOf(k)!==3) k=addDays(k,-1);
-    if(Object.keys(D).some(x=>x.startsWith(ym) && D[x].m.join('\n').includes('月會'))) return;
-    addM(k,`${m}月份月會`,'月會',0,'月會');
-  });
 
+  (rules||[]).forEach(r=>{
+    if(!r.on || !r.t || !r.t.trim()) return;
+    const label = r.t.replace(/\{n\}/g,'○').replace(/\{[a-z0-9]+\}/g,'').replace(/^\s*(上午|下午)?\d{1,2}:\d{2}/,'').replace(/[\(（].*$/,'').trim().slice(0,12);
+    const segs = r.t.split('、'), hasN = r.t.includes('{n}');
+    const span = /^w/.test(r.c) ? 3 : r.c==='mend' ? 6 : 0;
+    const monthly = !/^w/.test(r.c);
+    // 每個 {n} 的序列：日期 → 屆次
+    const counters = [];
+    if(hasN) segs.forEach(sg=>{
+      if(!sg.includes('{n}')) return;
+      const base=lastOcc(counterRe(sg), r.nm==='last' ? null : start);
+      const seq=occurrences(r, base?addDays(base.k,1):start, end), map={};
+      seq.forEach((o,i)=>{ map[o.k] = base ? base.num+i+1 : (+r.sn||1)+i; });
+      counters.push(map);
+    });
+    occurrences(r,start,end).forEach(o=>{
+      let t=r.t, ci=0, ok=true;
+      if(hasN) t=t.replace(/\{n\}/g,()=>{ const n=(counters[ci++]||{})[o.k]; if(n==null) ok=false; return n; });
+      if(!ok) return;
+      const [y,m]=o.ym.split('-').map(Number), n2=ymAdd(o.ym,1);
+      t=t.replace(/\{m\}/g,m).replace(/\{m2\}/g,+n2.slice(5)).replace(/\{y2\}/g,+n2.slice(0,4)-1911);
+      const part = hasN ? partOf(r.t,true) : partOf(t,false);
+      if(near(o.nom,part,r.f,span)) return;
+      if(monthly && monthHas(o.k.slice(0,7),part,r.f)) return;
+      place(o.k,r.f,t); bump(label);
+    });
+  });
   return st;
 }
 /* AF-END */
@@ -728,11 +759,51 @@ $('btnAddCol').onclick=()=>{ mcolsN=mcols()+1; store.set('jd_mcols',String(mcols
 let afBackup=null;
 function runAF(s,e){
   afBackup=JSON.stringify(days);
-  const st=autoFillDays(days,s,e), n=Object.values(st).reduce((x,y)=>x+y,0);
+  const st=autoFillDays(days,s,e,rules), n=Object.values(st).reduce((x,y)=>x+y,0);
   store.set('jd_days',JSON.stringify(days)); touch(); renderCal(); if(!$('p2').hidden) gen();
   $('afRes').textContent = n ? `已帶入 ${n} 項（${s.slice(5)}～${e.slice(5)}）：`+Object.entries(st).map(([k,v])=>`${k}${v}`).join('、') : '沒有需要補的項目（固定事項都已經填好了）';
   $('afbox').hidden=false;
 }
+/* ---- 固定事項清單（可編輯，存在瀏覽器並隨 Google 同步） ---- */
+let rules;
+try{ rules = JSON.parse(store.get('jd_rules','')); if(!Array.isArray(rules)) throw 0; }catch(e){ rules = JSON.parse(JSON.stringify(DEFAULT_RULES)); }
+function saveRules(){ store.set('jd_rules',JSON.stringify(rules)); touch(); }
+const WDN=['週日','週一','週二','週三','週四','週五','週六'];
+const opt=(arr,cur)=>arr.map(([v,l])=>`<option value="${v}"${String(cur)===String(v)?' selected':''}>${l}</option>`).join('');
+function renderRules(){
+  const tb=document.querySelector('#rules tbody');
+  tb.innerHTML=rules.map((r,i)=>{
+    const wk=/^w/.test(r.c), multi=wk&&r.c!=='w1', num=(r.t||'').includes('{n}');
+    return `<tr data-i="${i}">
+      <td><input type="checkbox" data-k="on"${r.on?' checked':''}></td>
+      <td><select data-k="f">${opt([['r','報表'],['m','會議']],r.f)}</select></td>
+      <td><input type="text" data-k="t" value="${hx(r.t||'').replace(/"/g,'&quot;')}"></td>
+      <td><select data-k="c">${opt([['w1','每週'],['w2','每2週'],['w3','每3週'],['w4','每4週'],['mlast','每月最後一個'],['mday','每月固定日'],['mend','每月底（結算上月）']],r.c)}</select></td>
+      <td><div class="sub">
+        ${(wk||r.c==='mlast')?`<select data-k="wd">${opt(WDN.map((l,v)=>[v,l]),r.wd==null?3:r.wd)}</select>`:''}
+        ${multi?`<label style="margin:0;display:flex;align-items:center;gap:3px;color:#000">其中一次<input type="date" data-k="a" value="${r.a||''}"></label>`:''}
+        ${r.c==='mday'?`<label style="margin:0;display:flex;align-items:center;gap:3px;color:#000">每月<input type="number" data-k="day" min="1" max="31" value="${r.day||1}" style="width:56px">日</label>`:''}
+        ${num?`<select data-k="nm" title="屆次從哪裡接續">${opt([['before','屆次接續：起算日前最後一次'],['last','屆次接續：日曆上最後一次']],r.nm||'before')}</select><label style="margin:0;display:flex;align-items:center;gap:3px;color:#000" title="日曆上找不到舊紀錄時，第一次的屆次">起始<input type="number" data-k="sn" min="1" value="${r.sn||1}" style="width:60px"></label>`:''}
+      </div></td>
+      <td><select data-k="d">${opt([['prev','前一個上班日'],['next','後一個上班日'],['skip','跳過'],['none','不調整']],r.d||'prev')}</select></td>
+      <td><button class="ghost" data-act="del" title="刪除這一列">刪</button></td></tr>`;
+  }).join('');
+}
+$('rules').addEventListener('change',e=>{
+  const el=e.target, tr=el.closest('tr'); if(!tr||!el.dataset.k) return;
+  const r=rules[+tr.dataset.i], k=el.dataset.k;
+  r[k] = el.type==='checkbox' ? (el.checked?1:0) : (['wd','day','sn'].includes(k) ? +el.value : el.value);
+  saveRules();
+  if(k==='c'&&/^w[234]$/.test(r.c)&&!r.a){ let d=todayKey(); while(wdOf(d)!==(r.wd==null?3:r.wd)) d=addDays(d,1); r.a=d; saveRules(); }
+  if(k==='c'||k==='t') renderRules();
+});
+$('rules').addEventListener('click',e=>{
+  const b=e.target.closest('button[data-act="del"]'); if(!b) return;
+  rules.splice(+b.closest('tr').dataset.i,1); saveRules(); renderRules();
+});
+$('ruleAdd').onclick=()=>{ rules.push({on:1,f:'m',t:'',c:'w1',wd:3,d:'skip'}); saveRules(); renderRules(); };
+$('ruleReset').onclick=()=>{ if(confirm('清單會恢復成預設內容（您改過的規則都會消失），確定嗎？')){ rules=JSON.parse(JSON.stringify(DEFAULT_RULES)); saveRules(); renderRules(); } };
+renderRules();
 $('btnAF').onclick=()=>{ const b=$('afbox'); b.hidden=!b.hidden; if(!$('afS').value){ $('afS').value=todayKey(); $('afE').value='2026-12-31'; } };
 $('afGo').onclick=()=>{ const s=$('afS').value, e=$('afE').value; if(!s||!e||s>e){ $('afRes').textContent='請選好起訖日期'; return; } runAF(s,e); };
 $('afUndo').onclick=()=>{
@@ -815,7 +886,7 @@ async function gPull(){
 }
 async function gPush(){
   let mod=+store.get('jd_mod','0'); if(!mod){ mod=Date.now(); store.set('jd_mod',String(mod)); }
-  const body=JSON.stringify({updated:mod,days,noise:$('noise').value,gap:$('gap').value});
+  const body=JSON.stringify({updated:mod,days,rules,noise:$('noise').value,gap:$('gap').value});
   if(!gFileId) gFileId=await gFind();
   if(gFileId){
     await gfetch(`https://www.googleapis.com/upload/drive/v3/files/${gFileId}?uploadType=media`,{method:'PATCH',headers:{'Content-Type':'application/json'},body});
@@ -829,6 +900,7 @@ async function gPush(){
 }
 function takeRemote(rem){
   days=normDays(rem.days||{}); store.set('jd_days',JSON.stringify(days));
+  if(Array.isArray(rem.rules)){ rules=rem.rules; store.set('jd_rules',JSON.stringify(rules)); renderRules(); }
   if(rem.noise!=null){ $('noise').value=rem.noise; store.set('jd_noise',rem.noise); }
   if(rem.gap!=null){ $('gap').value=rem.gap; store.set('jd_gap',rem.gap); }
   store.set('jd_mod',String(rem.updated)); store.set('jd_last',String(rem.updated));
