@@ -43,7 +43,9 @@ button.ghost:hover{border-color:var(--accent)}
 #sheet td{border-right:1px solid #b8b8b8;border-bottom:1px solid #b8b8b8;padding:0;vertical-align:top;background:#fff}
 #sheet td.dt,#sheet td.wd{padding:4px 6px;white-space:nowrap}
 #sheet td.dt{font-weight:700}
-#sheet td.dt.today{outline:2px solid #000;outline-offset:-2px}
+#sheet tr.off td{background:#e3f4dc}
+#sheet tr.today td{background:#ffe95c}
+#sheet tr.today textarea:focus,#sheet tr.off textarea:focus{background:rgba(255,255,255,.55)}
 #sheet textarea{display:block;width:100%;min-height:26px;border:0;border-radius:0;background:transparent;color:#000;
   padding:4px 6px;font:inherit;line-height:1.4;resize:none;overflow:hidden;field-sizing:content}
 #sheet textarea:focus{outline:2px solid var(--accent);outline-offset:-2px;background:#fffef0}
@@ -354,6 +356,7 @@ function sheetRange(){
   if(ks.length){ if(ks[0]<a) a=ks[0]; if(ks[ks.length-1]>b) b=ks[ks.length-1]; }
   return [a,b];
 }
+const isOffRec = (k,a) => { const w=wdOf(k); return w===0||w===6||(!!a && !/^[\d.]+$/.test(a) && /節|假|紀念日|國慶|光復|特休|補/.test(a)); };
 function fit(ta){ ta.style.height='auto'; ta.style.height=(ta.scrollHeight+2)+'px'; }
 const NATIVE_FIT = !!(window.CSS && CSS.supports && CSS.supports('field-sizing','content'));
 
@@ -365,8 +368,8 @@ function renderCal(){
       + `<thead><tr><th>周次</th><th>日期</th><th>星期</th><th>報表</th>${'<th>會議</th>'.repeat(nm)}</tr></thead><tbody>`;
   for(let k=a;k<=b;k=addDays(k,1)){
     const rec=days[k]||{a:'',r:'',m:[]}, dt=parseKey(k);
-    h+=`<tr data-k="${k}"><td><textarea rows="1" data-c="0">${hx(rec.a)}</textarea></td>`
-     + `<td class="dt${k===today?' today':''}">${dt.getFullYear()}/${dt.getMonth()+1}/${dt.getDate()}</td><td class="wd">星期${WD[dt.getDay()]}</td>`
+    h+=`<tr data-k="${k}" class="${k===today?'today':isOffRec(k,rec.a)?'off':''}"><td><textarea rows="1" data-c="0">${hx(rec.a)}</textarea></td>`
+     + `<td class="dt">${dt.getFullYear()}/${dt.getMonth()+1}/${dt.getDate()}</td><td class="wd">星期${WD[dt.getDay()]}</td>`
      + `<td><textarea rows="1" data-c="3">${hx(rec.r)}</textarea></td>`;
     for(let i=0;i<nm;i++) h+=`<td><textarea rows="1" data-c="${4+i}">${hx(rec.m[i]||'')}</textarea></td>`;
     h+='</tr>';
@@ -377,7 +380,9 @@ function renderCal(){
 }
 $('cal').addEventListener('input',e=>{
   const ta=e.target; if(ta.tagName!=='TEXTAREA') return;
-  setCell(ta.closest('tr').dataset.k, +ta.dataset.c, ta.value);
+  const tr=ta.closest('tr'), k=tr.dataset.k;
+  setCell(k, +ta.dataset.c, ta.value);
+  if(+ta.dataset.c===0 && !tr.classList.contains('today')) tr.classList.toggle('off', isOffRec(k,ta.value));
   if(!NATIVE_FIT) fit(ta);
 });
 function scrollToKey(k){
@@ -690,7 +695,7 @@ function setPane(n){
   $('t1').setAttribute('aria-pressed',n===1); $('t2').setAttribute('aria-pressed',n===2); $('t3').setAttribute('aria-pressed',n===3);
   store.set('jd_pane',String(n));
   if(n===2) gen();
-  if(n===1) requestAnimationFrame(()=>{ if(!window._sc){ window._sc=1; scrollToKey(addDays(todayKey(),-1)); } });
+  if(n===1){ const go=()=>scrollToKey(addDays(todayKey(),-1)); requestAnimationFrame(go); if(!window._sc){ window._sc=1; setTimeout(go,150); } }
 }
 $('t1').onclick=()=>setPane(1); $('t2').onclick=()=>setPane(2); $('t3').onclick=()=>setPane(3);
 $('month').addEventListener('change',()=>{ if($('month').value) setMonth($('month').value); });
