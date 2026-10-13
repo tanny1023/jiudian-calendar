@@ -59,13 +59,13 @@ button.ghost:hover{border-color:var(--accent)}
 #estsheet td.b{font-weight:700}
 #estsheet td.calc{color:#d00000}
 #estsheet td.cum{background:#dff3dc}
-#estsheet td.badc{background:#ffd0d0;color:#b00020;font-weight:700}
+#estsheet td.badc{background:#ffe933;font-weight:700}
 #estsheet td.chk{padding:3px 8px;font-size:12px;white-space:normal;min-width:180px;max-width:360px;color:#12703a}
-#estsheet td.chk.bad{color:#c0392b}
+#estsheet td.chk.bad{background:#ffe933;color:#000}
 #estsheet input{border:0;border-radius:0;background:transparent;color:#000;padding:3px 8px;font:inherit;width:100%;min-width:90px}
 #estsheet input.num{text-align:right;min-width:104px}
 #estsheet input.c{text-align:center;min-width:92px}
-#estsheet input.bad{background:#ffd0d0;color:#b00020;font-weight:700}
+#estsheet input.bad{background:#ffe933;color:#000;font-weight:700}
 #estsheet input:focus{outline:2px solid var(--accent);outline-offset:-2px;background:#fffef0}
 #estsheet button{padding:2px 8px;margin:2px}
 #estDrop{border:2px dashed var(--line);border-radius:12px;padding:16px;text-align:center;cursor:pointer;margin-bottom:10px}
@@ -215,7 +215,7 @@ details summary{cursor:pointer;color:var(--sub);font-size:13px;margin-top:6px}
 
   <!-- ========== 估驗計價 ========== -->
   <section id="p4" hidden>
-    <div id="estDrop"><b>把新的估驗計價公文 PDF 拖到這裡，或按這裡選檔（可多選）</b><br><span class="hint">自動讀取前 3 頁（OCR，第一次要下載中文辨識檔，約一分鐘），抓不到或核對不過的欄位會標紅，請對照公文手動改。</span><input type="file" id="estFile" accept=".pdf" multiple hidden></div>
+    <div id="estDrop"><b>把新的估驗計價公文 PDF 拖到這裡，或按這裡選檔（可多選）</b><br><span class="hint">自動讀取前 3 頁（OCR，第一次要下載中文辨識檔，約一分鐘），抓不到或核對不過的欄位會標<b style="background:#ffe933">黃底</b>，請對照公文手動改。</span><input type="file" id="estFile" accept=".pdf" multiple hidden></div>
     <div id="estLog" style="margin-bottom:8px"></div>
     <div class="tools">
       <button class="ghost" id="estAdd">＋新增一期（手動）</button>
@@ -225,7 +225,7 @@ details summary{cursor:pointer;color:var(--sub);font-size:13px;margin-top:6px}
       <button class="ghost" id="estExport">匯出 Excel</button>
     </div>
     <div id="estbox"></div>
-    <p class="hint">每一期只要填 4 格：土建廠商估驗、機電廠商估驗、物價調整款（兩家的「實付款項」相加）、懲罰性違約金（填負數）。總估驗金額、保留款（土建 2%、機電 4%，四捨五入）、實付金額、累積與進度都是公式自動算；<span style="color:#d00000">紅字</span>是公式算出來的、<span style="background:#dff3dc">淺綠底</span>是累積欄位；上傳 PDF 時會和公文的保留款、實付金額核對，對不上的格子標紅。數字格可輸入算式（例：844200+15515）。</p>
+    <p class="hint">每一期只要填 4 格：土建廠商估驗、機電廠商估驗、物價調整款（兩家的「實付款項」相加）、懲罰性違約金（填負數）。總估驗金額、保留款（土建 2%、機電 4%，四捨五入）、實付金額、累積與進度都是公式自動算；<span style="color:#d00000">紅字</span>是公式算出來的、<span style="background:#dff3dc">淺綠底</span>是累積欄位；上傳 PDF 時會和公文的保留款、實付金額核對，對不上的格子標黃底。數字格可輸入算式（例：844200+15515）。</p>
   </section>
 </div>
 
@@ -1233,7 +1233,7 @@ async function estUpload(files){
         if(old>=0) est.splice(old,1);
         est.push(r); added++;
         saveEst(); renderEst();
-        line.textContent=`第 ${r.n} 期（${r.month}）：${r.chk.length?'有 '+r.chk.length+' 項需要手動確認（紅色欄位）':'讀取完成，核對全部通過 ✓'}`;
+        line.textContent=`第 ${r.n} 期（${r.month}）：${r.chk.length?'有 '+r.chk.length+' 項需要手動確認（黃底欄位）':'讀取完成，核對全部通過 ✓'}`;
         line.className=r.chk.length?'bad':'ok';
       }catch(e){ line.textContent=`${f.name.slice(0,40)}… 失敗：${e.message||e}`; line.className='bad'; }
     }
