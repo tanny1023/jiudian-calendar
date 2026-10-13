@@ -57,6 +57,8 @@ button.ghost:hover{border-color:var(--accent)}
 #estsheet td.c{text-align:center;padding:3px 8px}
 #estsheet td.r{text-align:right;padding:3px 8px}
 #estsheet td.b{font-weight:700}
+#estsheet td.calc{color:#d00000}
+#estsheet td.cum{background:#dff3dc}
 #estsheet td.badc{background:#ffd0d0;color:#b00020;font-weight:700}
 #estsheet td.chk{padding:3px 8px;font-size:12px;white-space:normal;min-width:180px;max-width:360px;color:#12703a}
 #estsheet td.chk.bad{color:#c0392b}
@@ -223,7 +225,7 @@ details summary{cursor:pointer;color:var(--sub);font-size:13px;margin-top:6px}
       <button class="ghost" id="estExport">匯出 Excel</button>
     </div>
     <div id="estbox"></div>
-    <p class="hint">每一期只要填 4 格：土建廠商估驗、機電廠商估驗、物價調整款（兩家的「實付款項」相加）、懲罰性違約金（填負數）。總估驗金額、保留款（土建 2%、機電 4%，四捨五入）、實付金額、累積與進度都是公式自動算；上傳 PDF 時會和公文的保留款、實付金額核對，對不上的格子標紅。數字格可輸入算式（例：844200+15515）。</p>
+    <p class="hint">每一期只要填 4 格：土建廠商估驗、機電廠商估驗、物價調整款（兩家的「實付款項」相加）、懲罰性違約金（填負數）。總估驗金額、保留款（土建 2%、機電 4%，四捨五入）、實付金額、累積與進度都是公式自動算；<span style="color:#d00000">紅字</span>是公式算出來的、<span style="background:#dff3dc">淺綠底</span>是累積欄位；上傳 PDF 時會和公文的保留款、實付金額核對，對不上的格子標紅。數字格可輸入算式（例：844200+15515）。</p>
   </section>
 </div>
 
@@ -1039,8 +1041,8 @@ function renderEst(){
   const txt=(r,f,cls)=>`<td><input type="text" class="${cls||''}${r.flags&&r.flags[f]?' bad':''}" data-n="${r.n}" data-f="${f}" value="${hx(r[f]||'').replace(/"/g,'&quot;')}"></td>`;
   let h=`<table id="estsheet"><thead><tr><th>期數</th><th>日期</th><th>土建廠商估驗</th><th>機電廠商估驗</th><th>總估驗金額</th><th>保留款</th><th>物價調整款</th><th>懲罰性違約金</th><th>實付金額</th><th>累積估驗金額</th><th>累積實付金額(E+F)</th><th>估驗進度</th><th>核對</th><th></th></tr></thead><tbody>`;
   rows.forEach(r=>{
-    h+=`<tr data-n="${r.n}"><td class="c">${r.n}</td>${txt(r,'month','c')}${num(r,'lm')}${num(r,'qb')}<td class="r">${money(r.E)}</td><td class="r${r.flags&&r.flags.ret?' badc':''}">${money(r.ret)}</td>${num(r,'adj')}${num(r,'pen')}`
-     + `<td class="r b">${money(r.I)}</td><td class="r">${money(r.J)}</td><td class="r">${money(r.K)}</td><td class="r">${r.L==null?'':(r.L*100).toFixed(2)+'%'}</td>`
+    h+=`<tr data-n="${r.n}"><td class="c">${r.n}</td>${txt(r,'month','c')}${num(r,'lm')}${num(r,'qb')}<td class="r calc">${money(r.E)}</td><td class="r calc${r.flags&&r.flags.ret?' badc':''}">${money(r.ret)}</td>${num(r,'adj')}${num(r,'pen')}`
+     + `<td class="r b calc">${money(r.I)}</td><td class="r cum">${money(r.J)}</td><td class="r cum">${money(r.K)}</td><td class="r cum">${r.L==null?'':(r.L*100).toFixed(2)+'%'}</td>`
      + `<td class="chk ${r.chk&&r.chk.length?'bad':''}">${r.chk&&r.chk.length?hx(r.chk.join('；')):(r.checked?'✓':'')}</td><td><button class="ghost" data-del="${r.n}" title="刪除這一期">刪</button></td></tr>`;
   });
   box.innerHTML=h+'</tbody></table>'; box.scrollTop=keep;
