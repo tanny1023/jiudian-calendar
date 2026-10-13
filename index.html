@@ -50,6 +50,24 @@ button.ghost:hover{border-color:var(--accent)}
   padding:4px 6px;font:inherit;line-height:1.4;resize:none;overflow:hidden;field-sizing:content}
 #sheet textarea:focus{outline:2px solid var(--accent);outline-offset:-2px;background:#fffef0}
 #p2,#p3{max-width:1100px}
+#estbox{overflow:auto;max-height:calc(100vh - 330px);border:1px solid #000;background:#fff}
+#estsheet{border-collapse:separate;border-spacing:0;font-size:14px;color:#000;background:#fff;white-space:nowrap}
+#estsheet th{position:sticky;top:0;z-index:2;background:#fff;border-right:1px solid #000;border-bottom:2px solid #000;padding:5px 8px;text-align:center;font-weight:700}
+#estsheet td{border-right:1px solid #b8b8b8;border-bottom:1px solid #b8b8b8;padding:0;background:#fff}
+#estsheet td.c{text-align:center;padding:3px 8px}
+#estsheet td.r{text-align:right;padding:3px 8px}
+#estsheet td.b{font-weight:700}
+#estsheet td.chk{padding:3px 8px;font-size:12px;white-space:normal;min-width:180px;max-width:360px;color:#12703a}
+#estsheet td.chk.bad{color:#c0392b}
+#estsheet input{border:0;border-radius:0;background:transparent;color:#000;padding:3px 8px;font:inherit;width:100%;min-width:90px}
+#estsheet input.num{text-align:right;min-width:104px}
+#estsheet input.c{text-align:center;min-width:92px}
+#estsheet input.bad{background:#ffd0d0;color:#b00020;font-weight:700}
+#estsheet input:focus{outline:2px solid var(--accent);outline-offset:-2px;background:#fffef0}
+#estsheet button{padding:2px 8px;margin:2px}
+#estDrop{border:2px dashed var(--line);border-radius:12px;padding:16px;text-align:center;cursor:pointer;margin-bottom:10px}
+#estDrop.over{border-color:var(--accent);background:#eef4ff}
+#estLog .bad{color:#c0392b}#estLog .ok{color:#12703a}#estLog div{font-size:13px;margin:2px 0}
 #rules{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
 #rules th{font-weight:700;text-align:left;border-bottom:2px solid #000;padding:4px 4px;white-space:nowrap}
 #rules td{border-bottom:1px solid #d0d0d0;padding:3px 3px;vertical-align:top}
@@ -84,6 +102,7 @@ details summary{cursor:pointer;color:var(--sub);font-size:13px;margin-top:6px}
     <button id="t1" aria-pressed="true">行事曆</button>
     <button id="t2" aria-pressed="false">雙週大事紀</button>
     <button id="t3" aria-pressed="false">應辦事項管控表</button>
+    <button id="t4" aria-pressed="false">估驗計價</button>
   </div>
 
   <!-- ========== 行事曆 ========== -->
@@ -189,6 +208,20 @@ details summary{cursor:pointer;color:var(--sub);font-size:13px;margin-top:6px}
       <ul id="c_report"></ul>
       <a id="c_dl" style="display:none;text-decoration:none;margin-top:6px;border-radius:8px;padding:9px 16px;background:var(--ok);color:var(--accent-ink)">下載 Excel</a>
     </div>
+  </section>
+
+  <!-- ========== 估驗計價 ========== -->
+  <section id="p4" hidden>
+    <div id="estDrop"><b>把新的估驗計價公文 PDF 拖到這裡，或按這裡選檔（可多選）</b><br><span class="hint">自動讀取前 3 頁（OCR，第一次要下載中文辨識檔，約一分鐘），抓不到或核對不過的欄位會標紅，請對照公文手動改。</span><input type="file" id="estFile" accept=".pdf" multiple hidden></div>
+    <div id="estLog" style="margin-bottom:8px"></div>
+    <div class="tools">
+      <button class="ghost" id="estAdd">＋新增一期（手動）</button>
+      <label class="chk" style="display:inline-flex;align-items:center;gap:6px;margin:0;color:#000">契約總價 <input type="text" id="estTotal" style="width:150px"></label>
+      <span class="sp"></span>
+      <button class="ghost" id="estExport">匯出 Excel</button>
+    </div>
+    <div id="estbox"></div>
+    <p class="hint">第 1～27 期是已核對過的數字。物價調整款＝麗明＋擎邦的「實付款項」（已扣物調保留款）；保留款、違約金填負數；實付金額＝總估驗＋保留款＋物價調整款＋違約金，應等於公文主旨的實付款項。數字格可輸入算式（例：861429+16161）。</p>
   </section>
 </div>
 
@@ -746,13 +779,13 @@ function fitOut(){ const o=$('out'); o.style.height='auto'; o.style.height=Math.
 
 /* ---------- 事件 ---------- */
 function setPane(n){
-  $('p1').hidden = n!==1; $('p2').hidden = n!==2; $('p3').hidden = n!==3;
-  $('t1').setAttribute('aria-pressed',n===1); $('t2').setAttribute('aria-pressed',n===2); $('t3').setAttribute('aria-pressed',n===3);
+  $('p1').hidden = n!==1; $('p2').hidden = n!==2; $('p3').hidden = n!==3; $('p4').hidden = n!==4;
+  $('t1').setAttribute('aria-pressed',n===1); $('t2').setAttribute('aria-pressed',n===2); $('t3').setAttribute('aria-pressed',n===3); $('t4').setAttribute('aria-pressed',n===4);
   store.set('jd_pane',String(n));
   if(n===2) gen();
   if(n===1){ const go=()=>scrollToKey(addDays(todayKey(),-1)); requestAnimationFrame(go); if(!window._sc){ window._sc=1; setTimeout(go,150); } }
 }
-$('t1').onclick=()=>setPane(1); $('t2').onclick=()=>setPane(2); $('t3').onclick=()=>setPane(3);
+$('t1').onclick=()=>setPane(1); $('t2').onclick=()=>setPane(2); $('t3').onclick=()=>setPane(3); $('t4').onclick=()=>setPane(4);
 $('month').addEventListener('change',()=>{ if($('month').value) setMonth($('month').value); });
 $('goToday').onclick=()=>{ const t=todayKey(); $('month').value=t.slice(0,7); scrollToKey(addDays(t,-1)); };
 $('btnAddCol').onclick=()=>{ mcolsN=mcols()+1; store.set('jd_mcols',String(mcolsN)); renderCal(); };
@@ -886,7 +919,7 @@ async function gPull(){
 }
 async function gPush(){
   let mod=+store.get('jd_mod','0'); if(!mod){ mod=Date.now(); store.set('jd_mod',String(mod)); }
-  const body=JSON.stringify({updated:mod,days,rules,noise:$('noise').value,gap:$('gap').value});
+  const body=JSON.stringify({updated:mod,days,rules,est,estTotal,noise:$('noise').value,gap:$('gap').value});
   if(!gFileId) gFileId=await gFind();
   if(gFileId){
     await gfetch(`https://www.googleapis.com/upload/drive/v3/files/${gFileId}?uploadType=media`,{method:'PATCH',headers:{'Content-Type':'application/json'},body});
@@ -900,6 +933,7 @@ async function gPush(){
 }
 function takeRemote(rem){
   days=normDays(rem.days||{}); store.set('jd_days',JSON.stringify(days));
+  if(Array.isArray(rem.est)){ est=rem.est; if(rem.estTotal>0) estTotal=rem.estTotal; saveEstLocal(); renderEst(); }
   if(Array.isArray(rem.rules)){ rules=rem.rules; store.set('jd_rules',JSON.stringify(rules)); renderRules(); }
   if(rem.noise!=null){ $('noise').value=rem.noise; store.set('jd_noise',rem.noise); }
   if(rem.gap!=null){ $('gap').value=rem.gap; store.set('jd_gap',rem.gap); }
@@ -944,6 +978,261 @@ function gBoot(){
 }
 window.addEventListener('load',()=>{ const sc=document.createElement('script'); sc.src='https://accounts.google.com/gsi/client'; sc.async=true; sc.onload=gBoot; document.head.appendChild(sc); updateBtn(); });
 
+/* ---------- 估驗計價 ---------- */
+const EST_SEED = 
+[
+  {"n":1,"month":"113年6月份","lm":51352790,"qb":1679580,"ret":-1111035,"adj":0,"pen":0,"date":"113/08/30","no":"中市建新築字第1130036362號"},
+  {"n":2,"month":"113年7月份","lm":8199343,"qb":263307,"ret":-177152,"adj":0,"pen":-8000,"date":"113/09/23","no":"中市建新築字第1130039304號"},
+  {"n":3,"month":"113年8月份","lm":37023078,"qb":700888,"ret":-775506,"adj":0,"pen":0,"date":"113/10/22","no":"中市建新築字第1130044080號"},
+  {"n":4,"month":"113年9月份","lm":65690960,"qb":1143909,"ret":-1371014,"adj":0,"pen":0,"date":"113/11/13","no":"中市建新築字第1130047673號"},
+  {"n":5,"month":"113年10月份","lm":51960109,"qb":869777,"ret":-1082691,"adj":0,"pen":0,"date":"113/12/04","no":"中市建新築字第1130051320號"},
+  {"n":6,"month":"113年11月份","lm":37017181,"qb":708916,"ret":-775790,"adj":0,"pen":-24000,"date":"114/01/08","no":"中市建新築字第1140000858號"},
+  {"n":7,"month":"113年12月份","lm":24553656,"qb":521806,"ret":-511945,"adj":0,"pen":-16000,"date":"114/03/03","no":"中市建新築字第1140007995號"},
+  {"n":8,"month":"114年1月份","lm":12139617,"qb":335167,"ret":-256199,"adj":0,"pen":0,"date":"114/03/18","no":"中市建新築字第1140010185號"},
+  {"n":9,"month":"114年2月份","lm":8552116,"qb":281386,"ret":-182297,"adj":0,"pen":-8000,"date":"114/03/31","no":"中市建新築字第1140012343號"},
+  {"n":10,"month":"114年3月份","lm":29683539,"qb":728734,"ret":-622820,"adj":55506,"pen":0,"date":"114/05/08","no":"中市建新築字第1140017827號"},
+  {"n":11,"month":"114年4月份","lm":39936091,"qb":752673,"ret":-828829,"adj":162,"pen":-8000,"date":"114/06/06","no":"中市建新築字第1140022639號"},
+  {"n":12,"month":"114年5月份","lm":52012632,"qb":1572237,"ret":-1103142,"adj":15,"pen":0,"date":"114/07/08","no":"中市建新築字第1140027087號"},
+  {"n":13,"month":"114年6月份","lm":10401463,"qb":589581,"ret":-231612,"adj":0,"pen":-12000,"date":"114/08/11","no":"中市建新築字第1140032573號"},
+  {"n":14,"month":"114年7月份","lm":89762745,"qb":2227273,"ret":-1884346,"adj":-692496,"pen":0,"date":"114/09/04","no":"中市建新築字第1140036140號"},
+  {"n":15,"month":"114年8月份","lm":40459704,"qb":989884,"ret":-848789,"adj":-44648,"pen":-8000,"date":"114/10/09","no":"中市建新築字第1140040686號"},
+  {"n":16,"month":"114年9月份","lm":113106432,"qb":2199819,"ret":-2350122,"adj":-489205,"pen":0,"date":"114/11/04","no":"中市建新築字第1140043463號"},
+  {"n":17,"month":"114年10月份","lm":84337806,"qb":3536048,"ret":-1828198,"adj":-142493,"pen":0,"date":"114/12/01","no":"中市建新築字第1140047597號"},
+  {"n":18,"month":"114年11月份","lm":92154116,"qb":1666036,"ret":-1909723,"adj":-614416,"pen":0,"date":"115/01/02","no":"中市建新築字第1140051939號"},
+  {"n":19,"month":"114年12月份","lm":116022559,"qb":2164916,"ret":-2407048,"adj":-603418,"pen":-56000,"date":"115/02/02","no":"中市建新築字第1150003795號"},
+  {"n":20,"month":"115年1月份","lm":70279931,"qb":1586422,"ret":-1469056,"adj":166521,"pen":0,"date":"115/03/19","no":"中市建新築字第1150007914號"},
+  {"n":21,"month":"115年2月份","lm":54103907,"qb":1074098,"ret":-1125042,"adj":434239,"pen":0,"date":"115/04/24","no":"中市建新築字第1150013509號"},
+  {"n":22,"month":"115年3月份","lm":36038029,"qb":813493,"ret":-753301,"adj":669861,"pen":0,"date":"115/04/29","no":"中市建新築字第1150014074號"},
+  {"n":23,"month":"115年4月份","lm":88522421,"qb":1730852,"ret":-1839682,"adj":2603167,"pen":0,"date":"115/05/25","no":"中市建新築字第1150017261號"},
+  {"n":24,"month":"115年5月份","lm":26405883,"qb":610057,"ret":-552520,"adj":927049,"pen":0,"date":"115/07/03","no":"中市建新築字第1150022597號"},
+  {"n":25,"month":"115年6月份","lm":84676306,"qb":1542885,"ret":-1755241,"adj":3296832,"pen":0,"date":"115/10/05","no":"中市建新築字第1150035866號"},
+  {"n":26,"month":"115年7月份","lm":36473834,"qb":855191,"ret":-763685,"adj":1353745,"pen":0,"date":"115/10/05","no":"中市建新築字第1150035862號"},
+  {"n":27,"month":"115年8月份","lm":21985468,"qb":773931,"ret":-470666,"adj":859715,"pen":-80000,"date":"115/10/06","no":"中市建新築字第1150036222號"}
+];
+let est;
+try{ est = JSON.parse(store.get('jd_est','')); if(!Array.isArray(est)) throw 0; }catch(e){ est = JSON.parse(JSON.stringify(EST_SEED)); }
+let estTotal = +store.get('jd_est_total','9172400000') || 9172400000;
+function saveEst(){ store.set('jd_est',JSON.stringify(est)); store.set('jd_est_total',String(estTotal)); touch(); }
+
+const money = v => (v==null||v==='') ? '' : Math.round(v).toLocaleString('en-US');
+const EF = [['lm','麗明估驗'],['qb','擎邦估驗'],['ret','保留款'],['adj','物價調整款'],['pen','懲罰性違約金']];
+function estCalc(){
+  const rows=[...est].sort((a,b)=>a.n-b.n); let cum=0, cumPay=0;
+  rows.forEach(r=>{
+    r.E=(+r.lm||0)+(+r.qb||0);
+    r.I=r.E+(+r.ret||0)+(+r.adj||0)+(+r.pen||0);
+    cum+=r.E; cumPay+=r.E+(+r.ret||0);
+    r.J=cum; r.K=cumPay; r.L=cum/estTotal;
+  });
+  return rows;
+}
+function renderEst(){
+  const rows=estCalc(), box=$('estbox'), keep=box.scrollTop;
+  const num=(r,f)=>`<td><input type="text" class="num${r.flags&&r.flags[f]?' bad':''}" data-n="${r.n}" data-f="${f}" value="${money(r[f])}"></td>`;
+  const txt=(r,f,cls)=>`<td><input type="text" class="${cls||''}${r.flags&&r.flags[f]?' bad':''}" data-n="${r.n}" data-f="${f}" value="${hx(r[f]||'').replace(/"/g,'&quot;')}"></td>`;
+  let h=`<table id="estsheet"><thead><tr><th>期數</th><th>日期</th><th>麗明估驗</th><th>擎邦估驗</th><th>總估驗金額</th><th>保留款</th><th>物價調整款</th><th>懲罰性違約金</th><th>實付金額</th><th>累積估驗金額</th><th>累積實付金額(E+F)</th><th>估驗進度</th><th>公文日期</th><th>發文字號</th><th>核對</th><th></th></tr></thead><tbody>`;
+  rows.forEach(r=>{
+    h+=`<tr data-n="${r.n}"><td class="c">${r.n}</td>${txt(r,'month','c')}${num(r,'lm')}${num(r,'qb')}<td class="r">${money(r.E)}</td>${num(r,'ret')}${num(r,'adj')}${num(r,'pen')}`
+     + `<td class="r b">${money(r.I)}</td><td class="r">${money(r.J)}</td><td class="r">${money(r.K)}</td><td class="r">${(r.L*100).toFixed(2)}%</td>`
+     + `${txt(r,'date','c')}${txt(r,'no')}<td class="chk ${r.chk&&r.chk.length?'bad':''}">${r.chk&&r.chk.length?hx(r.chk.join('；')):(r.checked?'✓':'')}</td><td><button class="ghost" data-del="${r.n}" title="刪除這一期">刪</button></td></tr>`;
+  });
+  box.innerHTML=h+'</tbody></table>'; box.scrollTop=keep;
+  $('estTotal').value=estTotal;
+}
+function parseNum(s){
+  s=String(s).replace(/[,，\s]/g,'');
+  if(s==='') return 0;
+  if(!/^[-+]?[\d.]+([-+][\d.]+)*$/.test(s)) return NaN;
+  try{ return Function('"use strict";return ('+s+')')(); }catch(e){ return NaN; }
+}
+$('estbox').addEventListener('change',e=>{
+  const el=e.target; if(!el.dataset||!el.dataset.f) return;
+  const r=est.find(x=>x.n===+el.dataset.n), f=el.dataset.f; if(!r) return;
+  if(['lm','qb','ret','adj','pen'].includes(f)){ const v=parseNum(el.value); if(isNaN(v)){ el.value=money(r[f]); return; } r[f]=Math.round(v); }
+  else r[f]=el.value.trim();
+  if(r.flags) delete r.flags[f];
+  saveEst(); renderEst();
+});
+$('estbox').addEventListener('click',e=>{
+  const b=e.target.closest('button[data-del]'); if(!b) return;
+  if(!confirm(`刪除第 ${b.dataset.del} 期？`)) return;
+  est=est.filter(r=>r.n!==+b.dataset.del); saveEst(); renderEst();
+});
+$('estTotal').addEventListener('change',()=>{ const v=parseNum($('estTotal').value); if(v>0){ estTotal=v; saveEst(); renderEst(); } });
+$('estAdd').onclick=()=>{
+  const n=prompt('新增第幾期？', String(Math.max(0,...est.map(r=>r.n))+1)); if(!n||isNaN(+n)) return;
+  if(est.some(r=>r.n===+n)){ alert('已經有這一期了'); return; }
+  est.push({n:+n,month:'',lm:0,qb:0,ret:0,adj:0,pen:0,date:'',no:''}); saveEst(); renderEst();
+};
+function estExport(){
+  if(typeof XLSX==='undefined'){ alert('Excel 元件沒有載入成功（可能沒有網路）。'); return; }
+  const rows=estCalc();
+  const head=['期數','日期','麗明估驗','擎邦估驗','總估驗金額','保留款','物價調整款','懲罰性違約金','實付金額','累積估驗金額','累積實付金額(E+F)','估驗進度','公文日期','發文字號'];
+  const aoa=[head].concat(rows.map(r=>[r.n,r.month,r.lm,r.qb,null,r.ret,r.adj,r.pen,null,null,null,null,r.date,r.no]));
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  rows.forEach((r,i)=>{ const x=i+2, c=(a,v)=>{ ws[a+x]=v; };
+    c('E',{t:'n',f:`C${x}+D${x}`,v:r.E}); c('I',{t:'n',f:`E${x}+F${x}+G${x}+H${x}`,v:r.I});
+    c('J',{t:'n',f:i?`E${x}+J${x-1}`:`E${x}`,v:r.J}); c('K',{t:'n',f:i?`E${x}+F${x}+K${x-1}`:`E${x}+F${x}`,v:r.K});
+    c('L',{t:'n',f:`J${x}/${estTotal}`,v:r.L,z:'0.00%'}); });
+  ws['!cols']=[6,12,14,13,14,13,13,13,14,16,18,10,12,28].map(w=>({wch:w}));
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'02-估驗金額');
+  const t=new Date(); XLSX.writeFile(wb,`估驗計價_${t.getFullYear()}${pad(t.getMonth()+1)}${pad(t.getDate())}.xlsx`);
+}
+$('estExport').onclick=estExport;
+
+/* ---- 從公文 PDF 讀取 ---- */
+function loadScript(src,test){
+  return new Promise((res,rej)=>{
+    if(test()) return res();
+    const s=document.createElement('script'); s.src=src; s.onload=()=>res(); s.onerror=()=>rej(new Error('載入失敗：'+src)); document.head.appendChild(s);
+  });
+}
+const AMT='(-?(?=\\d)(?:[\\d,]+億)?(?:[\\d,]+萬)?[\\d,]*)元';
+function amt(s){
+  if(s==null) return null;
+  s=String(s).replace(/[,，\s]/g,'');
+  const m=s.match(/^(-?)(?:(\d+(?:\.\d+)?)億)?(?:(\d+(?:\.\d+)?)萬)?(\d+)?$/);
+  if(!m||(!m[2]&&!m[3]&&!m[4])) return null;
+  const v=Math.round((+m[2]||0)*1e8+(+m[3]||0)*1e4+(+m[4]||0));
+  return m[1]?-v:v;
+}
+function normText(raw){
+  let t=raw.replace(/\s+/g,'').replace(/：/g,':').replace(/（/g,'(').replace(/）/g,')').replace(/，/g,',').replace(/．/g,'.');
+  t=t.replace(/:[—–−―~～一](?=\d)/g,':-').replace(/(?<=\d)[oO](?=[\d,萬億元])/g,'0').replace(/(?<=[\d,萬億])[lI|](?=[\d,萬億元])/g,'1');
+  const first=t.indexOf('主旨');       // 去掉第 2 頁起的「主旨：…工程估驗款計…」頁首
+  if(first>=0) t=t.slice(0,first+1)+t.slice(first+1).replace(/主旨:有關[^:]{0,80}?工程估驗款計[.…·。]*/g,'');
+  return t;
+}
+function takeItems(region){
+  const re=new RegExp('(估驗金額|保留款\\(\\d+%\\)|保留款|懲罰性違約金|物價調整款|實付款項):?'+AMT,'g'), out=[];
+  let m; while((m=re.exec(region))) out.push({k:m[1].replace(/\(\d+%\)/,''),v:amt(m[2]),pos:m.index});
+  return out;
+}
+function parseEstimate(raw,fname){
+  const t=normText(raw), chk=[], flags={};
+  const res={n:null,month:'',lm:null,qb:0,ret:null,adj:0,pen:0,date:'',no:'',src:fname};
+  const iSub=t.indexOf('主旨'), iShuo=t.indexOf('說明:');
+  const subj=t.slice(iSub<0?0:iSub, iShuo>0?iShuo:Math.min(t.length,iSub+400));
+  let m=subj.match(/第(\d+)[期次]\(?(\d{2,3})年(\d{1,2})月/);
+  if(m){ res.n=+m[1]; res.month=`${m[2]}年${m[3]}月份`; }
+  else{ flags.month=1; chk.push('讀不到期數／月份'); }
+  m=subj.match(new RegExp('實付[^\\d]{0,24}?'+AMT)); const payDoc=m?amt(m[1]):null;
+  // 發文日期／字號：檔名優先，讀不到再用內文
+  const fd=fname.match(/^(\d{3})(\d{2})(\d{2})-/), fn=fname.match(/中市建新築字第(\d+)/);
+  const td=t.match(/發文日期:?中華民國(\d+)年(\d+)月(\d+)日/), tn=t.match(/發文字號:?中市建新築字第(\d+)號/);
+  res.date = fd ? `${fd[1]}/${fd[2]}/${fd[3]}` : td ? `${td[1]}/${pad(+td[2])}/${pad(+td[3])}` : '';
+  res.no = fn ? `中市建新築字第${fn[1]}號` : tn ? `中市建新築字第${tn[1]}號` : '';
+  if(!res.date) flags.date=1; if(!res.no) flags.no=1;
+  // 說明三／說明四分段
+  let i3=t.search(/三[、.]次?查本期估驗金額/); if(i3<0) i3=t.indexOf('本期估驗金額'); if(i3<0) i3=Math.max(0,iShuo);
+  let i4=t.slice(i3).search(/四[、.](?:另經|本期|經|查|有)/); i4 = i4<0 ? -1 : i4+i3;
+  if(i4<0){ const k=t.indexOf('估驗期間',i3+20); i4=k; }
+  let i5=t.search(/五[、.](?:副本|本案|檢送)/); if(i5<0||i5<i4) i5=t.length;
+  const sec3=t.slice(i3, i4>0?i4:i5), sec4=i4>0?t.slice(i4,i5):'';
+  const totalM=sec3.match(new RegExp('本期估驗金額'+AMT)), totalDoc=totalM?amt(totalM[1]):null;
+  const penIntro=sec3.match(new RegExp('懲罰性違約金'+AMT));
+  const s3=(k=>{ const j=sec3.indexOf('分述如下'); return j<0?sec3:sec3.slice(j); })();
+  const q3=s3.indexOf('擎邦');
+  const it3=takeItems(s3);
+  const lmPart=it3.filter(x=>q3<0||x.pos<q3), qbPart=q3<0?[]:it3.filter(x=>x.pos>=q3);
+  const pick=(arr,k)=>{ const x=arr.find(y=>y.k===k); return x?x.v:null; };
+  res.lm=pick(lmPart,'估驗金額'); if(res.lm==null) flags.lm=1;
+  const qbEst=pick(qbPart,'估驗金額'); res.qb=qbEst==null?0:qbEst;
+  if(q3>=0 && qbEst==null){ flags.qb=1; chk.push('有擎邦但讀不到擎邦估驗金額'); }
+  const retLm=pick(lmPart,'保留款'), retQb=qbEst==null?0:pick(qbPart,'保留款');
+  if(retLm==null||(qbEst!=null&&retQb==null)){ flags.ret=1; }
+  res.ret=-((retLm||0)+(retQb||0));
+  const penItem=pick(lmPart,'懲罰性違約金'), penV=penItem!=null?penItem:(penIntro?amt(penIntro[1]):null);
+  res.pen=penV?-Math.abs(penV):0;
+  const payLm=pick(lmPart,'實付款項'), payQb=pick(qbPart,'實付款項');
+  // 說明四：物價調整款（一律用扣物調保留款後的「實付款項」）
+  let adjOk=true;
+  if(sec4){
+    const s4=(()=>{ const j=sec4.indexOf('分述如下'); return j<0?sec4:sec4.slice(j); })();
+    const q4=s4.indexOf('擎邦'), it4=takeItems(s4);
+    const a4=q4<0?it4:it4.filter(x=>x.pos<q4), b4=q4<0?[]:it4.filter(x=>x.pos>=q4);
+    const aPay=pick(a4,'實付款項'), bPay=pick(b4,'實付款項');
+    const none=/無物價(?:指數)?調整款|無物價調整/.test(sec4);
+    if(none && aPay==null && bPay==null) res.adj=0;
+    else{
+      res.adj=(aPay||0)+(bPay||0);
+      const aNone=/無物價/.test(q4>=0?s4.slice(0,q4):s4), bNone=/無物價/.test(q4>=0?s4.slice(q4):'');
+      if(aPay==null && !aNone) adjOk=false;
+      if(q4>=0 && bPay==null && !bNone) adjOk=false;
+      const gross=(pick(a4,'物價調整款')||0)+(pick(b4,'物價調整款')||0), gm=sec4.match(new RegExp('總指數物價調整款'+AMT+',?爰旨案'));
+      if(gm && amt(gm[1])!==gross){ flags.adj=1; chk.push(`③兩家物價調整款毛額 ${money(gross)}≠公文 ${money(amt(gm[1]))}`); }
+    }
+    if(!adjOk){ flags.adj=1; chk.push('讀不到物價調整款的實付款項'); }
+  }
+  // 核對
+  if(res.lm!=null){
+    const E=res.lm+res.qb;
+    if(totalDoc!=null && E!==totalDoc){ flags.lm=flags.qb=1; chk.push(`①麗明＋擎邦 ${money(E)}≠說明三 ${money(totalDoc)}`); }
+    if(payLm!=null && res.lm-(retLm||0)+res.pen!==payLm){ flags.lm=flags.ret=1; chk.push(`④麗明 估驗−保留款${res.pen?'−違約金':''}≠實付款項 ${money(payLm)}`); }
+    if(payQb!=null && res.qb-(retQb||0)!==payQb){ flags.qb=flags.ret=1; chk.push(`④擎邦 估驗−保留款≠實付款項 ${money(payQb)}`); }
+    const I=E+res.ret+res.adj+res.pen;
+    if(payDoc!=null && I!==payDoc){ flags.lm=flags.qb=flags.ret=flags.adj=flags.pen=1; chk.push(`②實付金額 ${money(I)}≠主旨 ${money(payDoc)}`); }
+    if(payDoc==null) chk.push('主旨沒讀到實付金額（未做②核對）');
+  }else chk.push('讀不到麗明估驗金額');
+  res.flags=flags; res.chk=chk; res.checked=!chk.length;
+  return res;
+}
+
+let ocrWorker=null;
+async function getWorker(setMsg){
+  if(ocrWorker) return ocrWorker;
+  await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js',()=>window.Tesseract);
+  ocrWorker=await Tesseract.createWorker('chi_tra',1,{logger:m=>{ if(m.progress!=null) setMsg(`${m.status} ${Math.round(m.progress*100)}%`); }});
+  return ocrWorker;
+}
+async function ocrPdf(file,setMsg){
+  if(!window.pdfjsLib) throw new Error('PDF 元件沒有載入成功');
+  pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
+  const w=await getWorker(setMsg); let text='';
+  for(let p=1;p<=Math.min(3,pdf.numPages);p++){
+    setMsg(`讀取第 ${p} 頁…`);
+    const page=await pdf.getPage(p), vp=page.getViewport({scale:2.0}), cv=document.createElement('canvas');
+    cv.width=vp.width; cv.height=vp.height;
+    await page.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise;
+    text+=(await w.recognize(cv)).data.text+'\n';
+    if(/五[、.]\s*副本/.test(text.replace(/\s+/g,''))) break;
+  }
+  return text;
+}
+const estLog=(t,cls)=>{ const d=document.createElement('div'); d.textContent=t; if(cls) d.className=cls; $('estLog').appendChild(d); return d; };
+let estBusy=false;
+async function estUpload(files){
+  files=[...files].filter(f=>/\.pdf$/i.test(f.name)); if(!files.length||estBusy) return;
+  estBusy=true; $('estLog').innerHTML=''; let added=0;
+  try{
+    for(const f of files){
+      const line=estLog(`${f.name.slice(0,40)}… 辨識中`);
+      try{
+        const text=await ocrPdf(f,msg=>{ line.textContent=`${f.name.slice(0,40)}… ${msg}`; });
+        const r=parseEstimate(text,f.name);
+        if(r.n==null){ line.textContent=`${f.name.slice(0,40)}… 讀不到期數，已略過（請確認是估驗計價公文）`; line.className='bad'; continue; }
+        const old=est.findIndex(x=>x.n===r.n);
+        if(old>=0 && !confirm(`第 ${r.n} 期已經有資料了，要用這份 PDF 的內容覆蓋嗎？`)){ line.textContent=`第 ${r.n} 期：已略過（保留原資料）`; continue; }
+        if(old>=0) est.splice(old,1);
+        est.push(r); added++;
+        saveEst(); renderEst();
+        line.textContent=`第 ${r.n} 期（${r.month}）：${r.chk.length?'有 '+r.chk.length+' 項需要手動確認（紅色欄位）':'讀取完成，核對全部通過 ✓'}`;
+        line.className=r.chk.length?'bad':'ok';
+      }catch(e){ line.textContent=`${f.name.slice(0,40)}… 失敗：${e.message||e}`; line.className='bad'; }
+    }
+  } finally{ estBusy=false; }
+  if(added){ const b=$('estbox'); b.scrollTop=b.scrollHeight; }
+}
+const eDrop=$('estDrop');
+eDrop.addEventListener('click',()=>$('estFile').click());
+$('estFile').addEventListener('change',e=>{ estUpload(e.target.files); e.target.value=''; });
+['dragover','dragenter'].forEach(ev=>eDrop.addEventListener(ev,e=>{ e.preventDefault(); eDrop.classList.add('over'); }));
+['dragleave','drop'].forEach(ev=>eDrop.addEventListener(ev,e=>{ e.preventDefault(); eDrop.classList.remove('over'); }));
+eDrop.addEventListener('drop',e=>estUpload(e.dataTransfer.files));
+renderEst();
+function saveEstLocal(){ store.set('jd_est',JSON.stringify(est)); store.set('jd_est_total',String(estTotal)); }
+
 /* ---------- 初始化 ---------- */
 (function init(){
   const t=new Date();
@@ -952,7 +1241,7 @@ window.addEventListener('load',()=>{ const sc=document.createElement('script'); 
   $('noise').value = store.get('jd_noise',DEFAULT_NOISE.join('\n'));
   const s = store.get('jd_start',''); setRange(s||mondayOf(todayKey()));
   renderCal();
-  setPane({'2':2,'3':3}[store.get('jd_pane','1')]||1);
+  setPane({'2':2,'3':3,'4':4}[store.get('jd_pane','1')]||1);
 })();
 /* ---------- 應辦事項管控表 ---------- */
 (function(){
