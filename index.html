@@ -99,8 +99,9 @@ details summary{cursor:pointer;color:var(--sub);font-size:13px;margin-top:6px}
 <body>
 <div class="wrap">
   <h1>報表進度小幫手</h1>
-  <p class="lead">取代 Excel「01-行事曆」分頁：在這裡填寫每日會議與報表事項，選好期間就能產生「雙週大事紀」純文字。資料只存在這台電腦的瀏覽器裡（不會上傳）。</p>
+  <p class="lead">取代 Excel「01-行事曆」分頁：在這裡填寫每日會議與報表事項，選好期間就能產生「雙週大事紀」純文字。</p>
 
+  <div id="syncTop" class="hint" style="min-height:18px;margin:-8px 0 8px"></div>
   <div class="seg">
     <button id="t1" aria-pressed="true">行事曆</button>
     <button id="t2" aria-pressed="false">雙週大事紀</button>
@@ -873,7 +874,7 @@ const GFILE = 'jiudian-calendar.json';
 const clientId = () => (store.get('jd_cid','') || CLIENT_ID_DEFAULT).trim();
 let gTok=null, gExp=0, gTC=null, gFileId=null, pushT=null, syncing=false;
 const gOK = () => gTok && Date.now() < gExp-60000;
-function setSync(t,err){ const s=$('syncStatus'); s.textContent=t; s.style.color=err?'#c0392b':'var(--sub)'; }
+function setSync(t,err){ for(const id of ['syncStatus','syncTop']){ const s=$(id); s.textContent=t; s.style.color=err?'#c0392b':'var(--sub)'; } }
 function touch(){
   store.set('jd_mod',String(Math.max(Date.now(),+store.get('jd_last','0')+1)));   // 避免電腦時鐘較慢時推不上去
   if(store.get('jd_g','')!=='1') return;
@@ -898,6 +899,7 @@ async function onTok(r){
     updateBtn(); return;
   }
   gTok=r.access_token; gExp=Date.now()+(r.expires_in||3600)*1000; store.set('jd_g','1');
+  clearTimeout(onTok._t); onTok._t=setTimeout(()=>{ if(gInit()) gTC.requestAccessToken({prompt:'none'}); },Math.max(60,(r.expires_in||3600)-300)*1000);
   try{ const a=await (await gfetch('https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)')).json(); if(a.user) store.set('jd_gmail',a.user.emailAddress); }catch(e){}
   updateBtn(); syncNow();
 }
@@ -980,7 +982,11 @@ $('btnG').onclick=()=>{
 };
 $('cid').value=clientId();
 $('cidSave').onclick=()=>{ store.set('jd_cid',$('cid').value.trim()); gTC=null; setSync('已儲存用戶端 ID，請按「Google 登入同步」'); };
-document.addEventListener('visibilitychange',()=>{ if(!document.hidden && gOK()) syncNow(); });
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden) return;
+  if(gOK()) syncNow();
+  else if(store.get('jd_g','')==='1' && clientId() && gInit()) gTC.requestAccessToken({prompt:'none'});   // 授權過期了就悄悄續期
+});
 function gBoot(){
   updateBtn();
   if(store.get('jd_g','')==='1' && clientId() && gInit()){ setSync('正在連線 Google…'); gTC.requestAccessToken({prompt:'none'}); }
