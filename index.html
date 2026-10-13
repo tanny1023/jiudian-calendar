@@ -101,6 +101,7 @@ details summary{cursor:pointer;color:var(--sub);font-size:13px;margin-top:6px}
   <h1>報表進度小幫手</h1>
   <p class="lead">取代 Excel「01-行事曆」分頁：在這裡填寫每日會議與報表事項，選好期間就能產生「雙週大事紀」純文字。</p>
 
+  <div id="syncBanner" hidden style="background:#ffe933;color:#d00000;font-weight:700;border:2px solid #d00000;border-radius:8px;padding:8px 12px;margin:0 0 10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span id="syncBannerTxt"></span><button class="ghost" id="syncBannerBtn" style="color:#000;background:#fff">登入 Google</button></div>
   <div id="syncTop" class="hint" style="min-height:18px;margin:-8px 0 8px"></div>
   <div class="seg">
     <button id="t1" aria-pressed="true">行事曆</button>
@@ -890,7 +891,15 @@ function gInit(){
 function updateBtn(){
   const on=store.get('jd_g','')==='1', b=$('btnG');
   b.textContent = !on ? 'Google 登入同步' : gOK() ? '登出 Google' : '重新連線 Google';
+  const bn=$('syncBanner');
+  if(gOK()) bn.hidden=true;
+  else{
+    $('syncBannerTxt').textContent = !on ? '⚠ 尚未登入 Google：資料只存在這台電腦，不會同步到其他電腦！' : '⚠ Google 連線已中斷：目前的修改不會同步，請重新連線！';
+    $('syncBannerBtn').textContent = !on ? '登入 Google' : '重新連線 Google';
+    bn.hidden=false;
+  }
 }
+setInterval(()=>updateBtn(),20000);
 async function onTok(r){
   if(r.error){
     if(r.error==='interaction_required'||r.error==='access_denied'||r.error==='popup_closed')
@@ -973,6 +982,7 @@ async function syncNow(){
   }catch(e){ setSync('同步失敗：'+(e.message||e),true); }
   finally{ syncing=false; updateBtn(); }
 }
+$('syncBannerBtn').onclick=()=>$('btnG').click();
 $('btnG').onclick=()=>{
   if(store.get('jd_g','')==='1' && gOK()){
     if(!confirm('登出 Google 後，這台電腦不再自動同步（本機資料與雲端資料都保留）。確定登出？')) return;
