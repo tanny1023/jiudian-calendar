@@ -57,6 +57,7 @@ button.ghost:hover{border-color:var(--accent)}
 #estsheet td.c{text-align:center;padding:3px 8px}
 #estsheet td.r{text-align:right;padding:3px 8px}
 #estsheet td.b{font-weight:700}
+#estsheet td.badc{background:#ffd0d0;color:#b00020;font-weight:700}
 #estsheet td.chk{padding:3px 8px;font-size:12px;white-space:normal;min-width:180px;max-width:360px;color:#12703a}
 #estsheet td.chk.bad{color:#c0392b}
 #estsheet input{border:0;border-radius:0;background:transparent;color:#000;padding:3px 8px;font:inherit;width:100%;min-width:90px}
@@ -217,11 +218,12 @@ details summary{cursor:pointer;color:var(--sub);font-size:13px;margin-top:6px}
     <div class="tools">
       <button class="ghost" id="estAdd">＋新增一期（手動）</button>
       <label class="chk" style="display:inline-flex;align-items:center;gap:6px;margin:0;color:#000">契約總價 <input type="text" id="estTotal" style="width:150px" placeholder="輸入後才會算進度"></label>
+      <label class="chk" style="display:inline-flex;align-items:center;gap:6px;margin:0;color:#000">保留款率 土建 <input type="text" id="rateL" style="width:46px">% 機電 <input type="text" id="rateQ" style="width:46px">%</label>
       <span class="sp"></span>
       <button class="ghost" id="estExport">匯出 Excel</button>
     </div>
     <div id="estbox"></div>
-    <p class="hint">第 1～27 期是已核對過的數字。物價調整款＝土建廠商＋機電廠商的「實付款項」（已扣物調保留款）；保留款、違約金填負數；實付金額＝總估驗＋保留款＋物價調整款＋違約金，應等於公文主旨的實付款項。數字格可輸入算式（例：861429+16161）。</p>
+    <p class="hint">每一期只要填 4 格：土建廠商估驗、機電廠商估驗、物價調整款（兩家的「實付款項」相加）、懲罰性違約金（填負數）。總估驗金額、保留款（土建 2%、機電 4%，四捨五入）、實付金額、累積與進度都是公式自動算；上傳 PDF 時會和公文的保留款、實付金額核對，對不上的格子標紅。數字格可輸入算式（例：844200+15515）。</p>
   </section>
 </div>
 
@@ -919,7 +921,7 @@ async function gPull(){
 }
 async function gPush(){
   let mod=+store.get('jd_mod','0'); if(!mod){ mod=Date.now(); store.set('jd_mod',String(mod)); }
-  const body=JSON.stringify({updated:mod,days,rules,est,estTotal,noise:$('noise').value,gap:$('gap').value});
+  const body=JSON.stringify({updated:mod,days,rules,est,estTotal,estRates,noise:$('noise').value,gap:$('gap').value});
   if(!gFileId) gFileId=await gFind();
   if(gFileId){
     await gfetch(`https://www.googleapis.com/upload/drive/v3/files/${gFileId}?uploadType=media`,{method:'PATCH',headers:{'Content-Type':'application/json'},body});
@@ -933,7 +935,7 @@ async function gPush(){
 }
 function takeRemote(rem){
   days=normDays(rem.days||{}); store.set('jd_days',JSON.stringify(days));
-  if(Array.isArray(rem.est)){ est=rem.est; if(rem.estTotal>0) estTotal=rem.estTotal; saveEstLocal(); renderEst(); }
+  if(Array.isArray(rem.est)){ est=rem.est; if(rem.estTotal>0) estTotal=rem.estTotal; if(rem.estRates&&rem.estRates.l>0) estRates=rem.estRates; saveEstLocal(); renderEst(); }
   if(Array.isArray(rem.rules)){ rules=rem.rules; store.set('jd_rules',JSON.stringify(rules)); renderRules(); }
   if(rem.noise!=null){ $('noise').value=rem.noise; store.set('jd_noise',rem.noise); }
   if(rem.gap!=null){ $('gap').value=rem.gap; store.set('jd_gap',rem.gap); }
@@ -981,38 +983,41 @@ window.addEventListener('load',()=>{ const sc=document.createElement('script'); 
 /* ---------- 估驗計價 ---------- */
 const EST_SEED = 
 [
-  {"n":1,"month":"113年6月份","lm":51352790,"qb":1679580,"ret":-1111035,"adj":0,"pen":0},
-  {"n":2,"month":"113年7月份","lm":8199343,"qb":263307,"ret":-177152,"adj":0,"pen":-8000},
-  {"n":3,"month":"113年8月份","lm":37023078,"qb":700888,"ret":-775506,"adj":0,"pen":0},
-  {"n":4,"month":"113年9月份","lm":65690960,"qb":1143909,"ret":-1371014,"adj":0,"pen":0},
-  {"n":5,"month":"113年10月份","lm":51960109,"qb":869777,"ret":-1082691,"adj":0,"pen":0},
-  {"n":6,"month":"113年11月份","lm":37017181,"qb":708916,"ret":-775790,"adj":0,"pen":-24000},
-  {"n":7,"month":"113年12月份","lm":24553656,"qb":521806,"ret":-511945,"adj":0,"pen":-16000},
-  {"n":8,"month":"114年1月份","lm":12139617,"qb":335167,"ret":-256199,"adj":0,"pen":0},
-  {"n":9,"month":"114年2月份","lm":8552116,"qb":281386,"ret":-182297,"adj":0,"pen":-8000},
-  {"n":10,"month":"114年3月份","lm":29683539,"qb":728734,"ret":-622820,"adj":55506,"pen":0},
-  {"n":11,"month":"114年4月份","lm":39936091,"qb":752673,"ret":-828829,"adj":162,"pen":-8000},
-  {"n":12,"month":"114年5月份","lm":52012632,"qb":1572237,"ret":-1103142,"adj":15,"pen":0},
-  {"n":13,"month":"114年6月份","lm":10401463,"qb":589581,"ret":-231612,"adj":0,"pen":-12000},
-  {"n":14,"month":"114年7月份","lm":89762745,"qb":2227273,"ret":-1884346,"adj":-692496,"pen":0},
-  {"n":15,"month":"114年8月份","lm":40459704,"qb":989884,"ret":-848789,"adj":-44648,"pen":-8000},
-  {"n":16,"month":"114年9月份","lm":113106432,"qb":2199819,"ret":-2350122,"adj":-489205,"pen":0},
-  {"n":17,"month":"114年10月份","lm":84337806,"qb":3536048,"ret":-1828198,"adj":-142493,"pen":0},
-  {"n":18,"month":"114年11月份","lm":92154116,"qb":1666036,"ret":-1909723,"adj":-614416,"pen":0},
-  {"n":19,"month":"114年12月份","lm":116022559,"qb":2164916,"ret":-2407048,"adj":-603418,"pen":-56000},
-  {"n":20,"month":"115年1月份","lm":70279931,"qb":1586422,"ret":-1469056,"adj":166521,"pen":0},
-  {"n":21,"month":"115年2月份","lm":54103907,"qb":1074098,"ret":-1125042,"adj":434239,"pen":0},
-  {"n":22,"month":"115年3月份","lm":36038029,"qb":813493,"ret":-753301,"adj":669861,"pen":0},
-  {"n":23,"month":"115年4月份","lm":88522421,"qb":1730852,"ret":-1839682,"adj":2603167,"pen":0},
-  {"n":24,"month":"115年5月份","lm":26405883,"qb":610057,"ret":-552520,"adj":927049,"pen":0},
-  {"n":25,"month":"115年6月份","lm":84676306,"qb":1542885,"ret":-1755241,"adj":3296832,"pen":0},
-  {"n":26,"month":"115年7月份","lm":36473834,"qb":855191,"ret":-763685,"adj":1353745,"pen":0},
-  {"n":27,"month":"115年8月份","lm":21985468,"qb":773931,"ret":-470666,"adj":859715,"pen":-80000}
+  {"n":1,"month":"113年6月份","lm":51352790,"qb":1679580,"adj":0,"pen":0},
+  {"n":2,"month":"113年7月份","lm":8199343,"qb":263307,"adj":0,"pen":-8000},
+  {"n":3,"month":"113年8月份","lm":37023078,"qb":700888,"adj":0,"pen":0},
+  {"n":4,"month":"113年9月份","lm":65690960,"qb":1143909,"adj":0,"pen":0},
+  {"n":5,"month":"113年10月份","lm":51960109,"qb":869777,"adj":0,"pen":0},
+  {"n":6,"month":"113年11月份","lm":37017181,"qb":708916,"adj":0,"pen":-24000},
+  {"n":7,"month":"113年12月份","lm":24553656,"qb":521806,"adj":0,"pen":-16000},
+  {"n":8,"month":"114年1月份","lm":12139617,"qb":335167,"adj":0,"pen":0},
+  {"n":9,"month":"114年2月份","lm":8552116,"qb":281386,"adj":0,"pen":-8000},
+  {"n":10,"month":"114年3月份","lm":29683539,"qb":728734,"adj":55506,"pen":0},
+  {"n":11,"month":"114年4月份","lm":39936091,"qb":752673,"adj":162,"pen":-8000},
+  {"n":12,"month":"114年5月份","lm":52012632,"qb":1572237,"adj":15,"pen":0},
+  {"n":13,"month":"114年6月份","lm":10401463,"qb":589581,"adj":0,"pen":-12000},
+  {"n":14,"month":"114年7月份","lm":89762745,"qb":2227273,"adj":-692496,"pen":0},
+  {"n":15,"month":"114年8月份","lm":40459704,"qb":989884,"adj":-44648,"pen":-8000},
+  {"n":16,"month":"114年9月份","lm":113106432,"qb":2199819,"adj":-489205,"pen":0},
+  {"n":17,"month":"114年10月份","lm":84337806,"qb":3536048,"adj":-142493,"pen":0},
+  {"n":18,"month":"114年11月份","lm":92154116,"qb":1666036,"adj":-614416,"pen":0},
+  {"n":19,"month":"114年12月份","lm":116022559,"qb":2164916,"adj":-603418,"pen":-56000},
+  {"n":20,"month":"115年1月份","lm":70279931,"qb":1586422,"adj":166521,"pen":0},
+  {"n":21,"month":"115年2月份","lm":54103907,"qb":1074098,"adj":434239,"pen":0},
+  {"n":22,"month":"115年3月份","lm":36038029,"qb":813493,"adj":669861,"pen":0},
+  {"n":23,"month":"115年4月份","lm":88522421,"qb":1730852,"adj":2603167,"pen":0},
+  {"n":24,"month":"115年5月份","lm":26405883,"qb":610057,"adj":927049,"pen":0},
+  {"n":25,"month":"115年6月份","lm":84676306,"qb":1542885,"adj":3296832,"pen":0},
+  {"n":26,"month":"115年7月份","lm":36473834,"qb":855191,"adj":1353745,"pen":0},
+  {"n":27,"month":"115年8月份","lm":21985468,"qb":773931,"adj":859715,"pen":-80000}
 ];
 let est;
 try{ est = JSON.parse(store.get('jd_est','')); if(!Array.isArray(est)) throw 0; }catch(e){ est = JSON.parse(JSON.stringify(EST_SEED)); }
 let estTotal = +store.get('jd_est_total','0') || 0;
-function saveEst(){ store.set('jd_est',JSON.stringify(est)); store.set('jd_est_total',String(estTotal)); touch(); }
+let estRates; try{ estRates=JSON.parse(store.get('jd_est_rates','')); }catch(e){}
+if(!estRates||!(estRates.l>0)||!(estRates.q>0)) estRates={l:2,q:4};   // 土建廠商 2%、機電廠商 4%
+est.forEach(r=>{ if(r.n<=6 && r.rq==null) r.rq=0.05; });            // 第 1～6 期機電廠商保留款率為 5%
+function saveEst(){ store.set('jd_est',JSON.stringify(est)); store.set('jd_est_total',String(estTotal)); store.set('jd_est_rates',JSON.stringify(estRates)); touch(); }
 
 const money = v => (v==null||v==='') ? '' : Math.round(v).toLocaleString('en-US');
 const EF = [['lm','土建廠商估驗'],['qb','機電廠商估驗'],['ret','保留款'],['adj','物價調整款'],['pen','懲罰性違約金']];
@@ -1020,6 +1025,8 @@ function estCalc(){
   const rows=[...est].sort((a,b)=>a.n-b.n); let cum=0, cumPay=0;
   rows.forEach(r=>{
     r.E=(+r.lm||0)+(+r.qb||0);
+    r.rateL=r.rl!=null?r.rl:estRates.l/100; r.rateQ=r.rq!=null?r.rq:estRates.q/100;
+    r.ret=-(Math.round((+r.lm||0)*r.rateL)+Math.round((+r.qb||0)*r.rateQ));   // 保留款＝ROUND(土建×率)＋ROUND(機電×率)
     r.I=r.E+(+r.ret||0)+(+r.adj||0)+(+r.pen||0);
     cum+=r.E; cumPay+=r.E+(+r.ret||0);
     r.J=cum; r.K=cumPay; r.L=estTotal>0?cum/estTotal:null;
@@ -1032,12 +1039,12 @@ function renderEst(){
   const txt=(r,f,cls)=>`<td><input type="text" class="${cls||''}${r.flags&&r.flags[f]?' bad':''}" data-n="${r.n}" data-f="${f}" value="${hx(r[f]||'').replace(/"/g,'&quot;')}"></td>`;
   let h=`<table id="estsheet"><thead><tr><th>期數</th><th>日期</th><th>土建廠商估驗</th><th>機電廠商估驗</th><th>總估驗金額</th><th>保留款</th><th>物價調整款</th><th>懲罰性違約金</th><th>實付金額</th><th>累積估驗金額</th><th>累積實付金額(E+F)</th><th>估驗進度</th><th>核對</th><th></th></tr></thead><tbody>`;
   rows.forEach(r=>{
-    h+=`<tr data-n="${r.n}"><td class="c">${r.n}</td>${txt(r,'month','c')}${num(r,'lm')}${num(r,'qb')}<td class="r">${money(r.E)}</td>${num(r,'ret')}${num(r,'adj')}${num(r,'pen')}`
+    h+=`<tr data-n="${r.n}"><td class="c">${r.n}</td>${txt(r,'month','c')}${num(r,'lm')}${num(r,'qb')}<td class="r">${money(r.E)}</td><td class="r${r.flags&&r.flags.ret?' badc':''}">${money(r.ret)}</td>${num(r,'adj')}${num(r,'pen')}`
      + `<td class="r b">${money(r.I)}</td><td class="r">${money(r.J)}</td><td class="r">${money(r.K)}</td><td class="r">${r.L==null?'':(r.L*100).toFixed(2)+'%'}</td>`
      + `<td class="chk ${r.chk&&r.chk.length?'bad':''}">${r.chk&&r.chk.length?hx(r.chk.join('；')):(r.checked?'✓':'')}</td><td><button class="ghost" data-del="${r.n}" title="刪除這一期">刪</button></td></tr>`;
   });
   box.innerHTML=h+'</tbody></table>'; box.scrollTop=keep;
-  $('estTotal').value=estTotal||'';
+  $('estTotal').value=estTotal||''; $('rateL').value=estRates.l; $('rateQ').value=estRates.q;
 }
 function parseNum(s){
   s=String(s).replace(/[,，\s]/g,'');
@@ -1048,7 +1055,7 @@ function parseNum(s){
 $('estbox').addEventListener('change',e=>{
   const el=e.target; if(!el.dataset||!el.dataset.f) return;
   const r=est.find(x=>x.n===+el.dataset.n), f=el.dataset.f; if(!r) return;
-  if(['lm','qb','ret','adj','pen'].includes(f)){ const v=parseNum(el.value); if(isNaN(v)){ el.value=money(r[f]); return; } r[f]=Math.round(v); }
+  if(['lm','qb','adj','pen'].includes(f)){ const v=parseNum(el.value); if(isNaN(v)){ el.value=money(r[f]); return; } r[f]=Math.round(v); }
   else r[f]=el.value.trim();
   if(r.flags) delete r.flags[f];
   saveEst(); renderEst();
@@ -1059,6 +1066,7 @@ $('estbox').addEventListener('click',e=>{
   est=est.filter(r=>r.n!==+b.dataset.del); saveEst(); renderEst();
 });
 $('estTotal').addEventListener('change',()=>{ const v=parseNum($('estTotal').value); estTotal=v>0?v:0; saveEst(); renderEst(); });
+['rateL','rateQ'].forEach(id=>$(id).addEventListener('change',()=>{ const v=parseNum($(id).value); if(v>0&&v<100){ estRates[id==='rateL'?'l':'q']=v; saveEst(); } renderEst(); }));
 $('estAdd').onclick=()=>{
   const n=prompt('新增第幾期？', String(Math.max(0,...est.map(r=>r.n))+1)); if(!n||isNaN(+n)) return;
   if(est.some(r=>r.n===+n)){ alert('已經有這一期了'); return; }
@@ -1071,7 +1079,7 @@ function estExport(){
   const aoa=[head].concat(rows.map(r=>[r.n,r.month,r.lm,r.qb,null,r.ret,r.adj,r.pen,null,null,null,null]));
   const ws=XLSX.utils.aoa_to_sheet(aoa);
   rows.forEach((r,i)=>{ const x=i+2, c=(a,v)=>{ ws[a+x]=v; };
-    c('E',{t:'n',f:`C${x}+D${x}`,v:r.E}); c('I',{t:'n',f:`E${x}+F${x}+G${x}+H${x}`,v:r.I});
+    c('E',{t:'n',f:`C${x}+D${x}`,v:r.E}); c('F',{t:'n',f:`-(ROUND(C${x}*${r.rateL},0)+ROUND(D${x}*${r.rateQ},0))`,v:r.ret}); c('I',{t:'n',f:`E${x}+F${x}+G${x}+H${x}`,v:r.I});
     c('J',{t:'n',f:i?`E${x}+J${x-1}`:`E${x}`,v:r.J}); c('K',{t:'n',f:i?`E${x}+F${x}+K${x-1}`:`E${x}+F${x}`,v:r.K});
     if(estTotal>0) c('L',{t:'n',f:`J${x}/${estTotal}`,v:r.L,z:'0.00%'}); });
   ws['!cols']=[6,12,14,13,14,13,13,13,14,16,18,10].map(w=>({wch:w}));
@@ -1105,7 +1113,7 @@ function normText(raw){
 }
 function takeItems(region){
   const re=new RegExp('(估驗金額|保留款\\(\\d+%\\)|保留款|懲罰性違約金|物價調整款|實付款項):?'+AMT,'g'), out=[];
-  let m; while((m=re.exec(region))) out.push({k:m[1].replace(/\(\d+%\)/,''),v:amt(m[2]),pos:m.index});
+  let m; while((m=re.exec(region))) out.push({k:m[1].replace(/\(\d+%\)/,''),v:amt(m[2]),pos:m.index,pct:(m[1].match(/\((\d+)%\)/)||[])[1]});
   return out;
 }
 function parseEstimate(raw,fname){
@@ -1133,9 +1141,21 @@ function parseEstimate(raw,fname){
   res.lm=pick(lmPart,'估驗金額'); if(res.lm==null) flags.lm=1;
   const qbEst=pick(qbPart,'估驗金額'); res.qb=qbEst==null?0:qbEst;
   if(q3>=0 && qbEst==null){ flags.qb=1; chk.push('有機電廠商但讀不到機電廠商估驗金額'); }
-  const retLm=pick(lmPart,'保留款'), retQb=qbEst==null?0:pick(qbPart,'保留款');
-  if(retLm==null||(qbEst!=null&&retQb==null)){ flags.ret=1; }
-  res.ret=-((retLm||0)+(retQb||0));
+  const retLmI=lmPart.find(x=>x.k==='保留款'), retQbI=qbPart.find(x=>x.k==='保留款');
+  const retLm=retLmI?retLmI.v:null, retQb=qbEst==null?0:(retQbI?retQbI.v:null);
+  const dL=estRates.l/100, dQ=estRates.q/100;
+  const pl=retLmI&&retLmI.pct?+retLmI.pct/100:null, pq=retQbI&&retQbI.pct?+retQbI.pct/100:null;
+  if(pl!=null && Math.abs(pl-dL)>1e-9) res.rl=pl;
+  if(pq!=null && Math.abs(pq-dQ)>1e-9) res.rq=pq;
+  const usedL=res.rl!=null?res.rl:dL, usedQ=res.rq!=null?res.rq:dQ;
+  const calcL=res.lm==null?0:Math.round(res.lm*usedL), calcQ=Math.round(res.qb*usedQ);
+  res.ret=-(calcL+calcQ);                                       // 保留款一律用公式算，再跟公文核對
+  if(retLm==null||(qbEst!=null&&retQb==null)){ flags.ret=1; chk.push('讀不到公文的保留款（未核對保留款）'); }
+  else{
+    if(calcL!==retLm){ flags.ret=flags.lm=1; chk.push(`⑤土建保留款公式 ${money(calcL)}≠公文 ${money(retLm)}`); }
+    if(qbEst!=null && calcQ!==retQb){ flags.ret=flags.qb=1; chk.push(`⑤機電保留款公式 ${money(calcQ)}≠公文 ${money(retQb)}`); }
+  }
+  if(res.rl!=null||res.rq!=null) chk.push(`保留款率與預設不同（土建 ${Math.round(usedL*100)}%、機電 ${Math.round(usedQ*100)}%），請確認`);
   const penItem=pick(lmPart,'懲罰性違約金'), penV=penItem!=null?penItem:(penIntro?amt(penIntro[1]):null);
   res.pen=penV?-Math.abs(penV):0;
   const payLm=pick(lmPart,'實付款項'), payQb=pick(qbPart,'實付款項');
@@ -1225,7 +1245,7 @@ $('estFile').addEventListener('change',e=>{ estUpload(e.target.files); e.target.
 ['dragleave','drop'].forEach(ev=>eDrop.addEventListener(ev,e=>{ e.preventDefault(); eDrop.classList.remove('over'); }));
 eDrop.addEventListener('drop',e=>estUpload(e.dataTransfer.files));
 renderEst();
-function saveEstLocal(){ store.set('jd_est',JSON.stringify(est)); store.set('jd_est_total',String(estTotal)); }
+function saveEstLocal(){ store.set('jd_est',JSON.stringify(est)); store.set('jd_est_total',String(estTotal)); store.set('jd_est_rates',JSON.stringify(estRates)); }
 
 /* ---------- 初始化 ---------- */
 (function init(){
