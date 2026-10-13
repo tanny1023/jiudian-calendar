@@ -1115,12 +1115,71 @@ function normText(raw){
   return t;
 }
 function takeItems(region){
-  const re=new RegExp('(估驗金額|保留款\\(\\d+%\\)|保留款|懲罰性違約金|物價調整款|實付款項):?'+AMT,'g'), out=[];
-  let m; while((m=re.exec(region))) out.push({k:m[1].replace(/\(\d+%\)/,''),v:amt(m[2]),pos:m.index,pct:(m[1].match(/\((\d+)%\)/)||[])[1]});
+  const re=new RegExp('(估驗金額|保留款\\(\\d+%\\)|保留款|懲罰性違約金|物價調整款|物調款|實付款項|預計給付金額):?'+AMT,'g'), out=[];
+  let m; while((m=re.exec(region))) out.push({k:m[1].replace(/\(\d+%\)/,'').replace('物調款','物價調整款').replace('預計給付金額','實付款項'),v:amt(m[2]),pos:m.index,pct:(m[1].match(/\((\d+)%\)/)||[])[1]});
   return out;
+}
+// 另一種格式：麗明（承包商）發給新工處的「辦理第N次估驗請款計價」函
+function parseContractor(t){
+  const chk=[], flags={};
+  const res={n:null,month:'',lm:null,qb:0,ret:null,adj:0,al:0,aq:0,pen:0};
+  let m=t.match(/第(\d+)[次期]估驗/);
+  if(m) res.n=+m[1]; else{ flags.month=1; chk.push('讀不到期數'); }
+  m=t.match(/為(\d{2,3})年(\d{1,2})月\d{1,2}日[~～\-至](\d{2,3})年(\d{1,2})月\d{1,2}日/);
+  if(m) res.month=`${m[3]}年${m[4]}月份`;
+  else if((m=t.match(/估驗期間\((\d{2,3})年(\d{1,2})月\)/))) res.month=`${m[1]}年${m[2]}月份`;
+  else{ flags.month=1; chk.push('讀不到月份'); }
+  const totalM=t.match(new RegExp('本次估驗金額共計'+AMT)), totalDoc=totalM?amt(totalM[1]):null;
+  const i2=Math.max(0,t.indexOf('分述如下')), i3=t.indexOf('(三)',i2), i4=t.indexOf('(四)',i2);
+  const s2=t.slice(i2, i3>0?i3:undefined), s3=i3>0?t.slice(i3, i4>i3?i4:undefined):'', s4=i4>0?t.slice(i4):'';
+  const q2=s2.search(/二\)/), it2=takeItems(s2);
+  const lmPart=q2<0?it2:it2.filter(x=>x.pos<q2), qbPart=q2<0?[]:it2.filter(x=>x.pos>=q2);
+  const pick=(arr,k)=>{ const x=arr.find(y=>y.k===k); return x?x.v:null; };
+  res.lm=pick(lmPart,'估驗金額'); if(res.lm==null) flags.lm=1;
+  const qbEst=pick(qbPart,'估驗金額'); res.qb=qbEst==null?0:qbEst;
+  if(q2>=0 && qbEst==null){ flags.qb=1; chk.push('有機電廠商但讀不到機電廠商估驗金額'); }
+  // 保留款：公式算，再跟公文核對
+  const retLmI=lmPart.find(x=>x.k==='保留款'), retQbI=qbPart.find(x=>x.k==='保留款');
+  const retLm=retLmI?retLmI.v:null, retQb=qbEst==null?0:(retQbI?retQbI.v:null);
+  const dL=estRates.l/100, dQ=estRates.q/100;
+  const pl=retLmI&&retLmI.pct?+retLmI.pct/100:null, pq=retQbI&&retQbI.pct?+retQbI.pct/100:null;
+  if(pl!=null && Math.abs(pl-dL)>1e-9) res.rl=pl;
+  if(pq!=null && Math.abs(pq-dQ)>1e-9) res.rq=pq;
+  const usedL=res.rl!=null?res.rl:dL, usedQ=res.rq!=null?res.rq:dQ;
+  const calcL=res.lm==null?0:Math.round(res.lm*usedL), calcQ=Math.round(res.qb*usedQ);
+  res.ret=-(calcL+calcQ);
+  if(retLm==null||(qbEst!=null&&retQb==null)){ flags.ret=1; chk.push('讀不到公文的保留款（未核對保留款）'); }
+  else{
+    if(calcL!==retLm){ flags.ret=flags.lm=1; chk.push(`⑤土建保留款公式 ${money(calcL)}≠公文 ${money(retLm)}`); }
+    if(qbEst!=null && calcQ!==retQb){ flags.ret=flags.qb=1; chk.push(`⑤機電保留款公式 ${money(calcQ)}≠公文 ${money(retQb)}`); }
+  }
+  if(res.rl!=null||res.rq!=null) chk.push(`保留款率與預設不同（土建 ${Math.round(usedL*100)}%、機電 ${Math.round(usedQ*100)}%），請確認`);
+  // 物價調整：第 1 組＝土建、第 2 組＝機電，取「預計給付金額」
+  const it3=takeItems(s3), pays=it3.filter(x=>x.k==='實付款項'), gross=it3.filter(x=>x.k==='物價調整款'), ret3=it3.filter(x=>x.k==='保留款');
+  if(pays.length){
+    res.al=pays[0].v; res.aq=pays[1]?pays[1].v:0; res.adj=res.al+res.aq;
+    const gs=gross.reduce((a,x)=>a+x.v,0), gm=s3.match(new RegExp('物調金額共計'+AMT));
+    if(gm && amt(gm[1])!==gs){ flags.adj=1; chk.push(`③兩家物調款 ${money(gs)}≠公文物調金額共計 ${money(amt(gm[1]))}`); }
+    gross.forEach((g,i)=>{ if(pays[i] && ret3[i] && g.v-ret3[i].v!==pays[i].v){ flags.adj=1; chk.push(`④${i?'機電':'土建'}物調款−保留款≠預計給付金額`); } });
+  }else if(!/無物價|未超過|無物調/.test(s3)){ flags.adj=1; chk.push('讀不到物價調整款的預計給付金額'); }
+  // 懲罰性違約金
+  if(/無[^;；。]{0,30}違約金|無相關扣款/.test(s4)) res.pen=0;
+  else{ const pm=s4.match(new RegExp('違約金'+AMT)); if(pm) res.pen=-Math.abs(amt(pm[1])); else{ flags.pen=1; chk.push('讀不到懲罰性違約金'); } }
+  // 核對
+  if(res.lm!=null){
+    const E=res.lm+res.qb;
+    if(totalDoc!=null && E!==totalDoc){ flags.lm=flags.qb=1; chk.push(`①土建＋機電 ${money(E)}≠本次估驗金額共計 ${money(totalDoc)}`); }
+    const payLm=pick(lmPart,'實付款項'), payQb=pick(qbPart,'實付款項');
+    if(payLm!=null && retLm!=null && res.lm-retLm!==payLm){ flags.lm=flags.ret=1; chk.push(`④土建廠商 估驗−保留款≠預計給付金額 ${money(payLm)}`); }
+    if(payQb!=null && retQb!=null && res.qb-retQb!==payQb){ flags.qb=flags.ret=1; chk.push(`④機電廠商 估驗−保留款≠預計給付金額 ${money(payQb)}`); }
+  }else chk.push('讀不到土建廠商估驗金額');
+  if(flags.adj){ flags.al=flags.aq=1; }
+  res.flags=flags; res.chk=chk; res.checked=!chk.length;
+  return res;
 }
 function parseEstimate(raw,fname){
   const t=normText(raw), chk=[], flags={};
+  if(/預計給付金額/.test(t)) return parseContractor(t);
   const res={n:null,month:'',lm:null,qb:0,ret:null,adj:0,al:0,aq:0,pen:0};
   const iSub=t.indexOf('主旨'), iShuo=t.indexOf('說明:');
   const subj=t.slice(iSub<0?0:iSub, iShuo>0?iShuo:Math.min(t.length,iSub+400));
@@ -1208,6 +1267,8 @@ async function ocrPdf(file,setMsg){
   if(!window.pdfjsLib) throw new Error('PDF 元件沒有載入成功');
   pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
+  let layer=''; for(let p=1;p<=Math.min(3,pdf.numPages);p++){ const c=await (await pdf.getPage(p)).getTextContent(); layer+=c.items.map(i=>i.str).join('')+'\n'; }
+  if(layer.replace(/[\s.]/g,'').length>150){ setMsg('讀取文字…'); return layer; }
   const w=await getWorker(setMsg); let text='';
   for(let p=1;p<=Math.min(3,pdf.numPages);p++){
     setMsg(`讀取第 ${p} 頁…`);
