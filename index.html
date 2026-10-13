@@ -219,7 +219,7 @@ details summary{cursor:pointer;color:var(--sub);font-size:13px;margin-top:6px}
     <div id="estLog" style="margin-bottom:8px"></div>
     <div class="tools">
       <button class="ghost" id="estAdd">＋新增一期（手動）</button>
-      <label class="chk" style="display:inline-flex;align-items:center;gap:6px;margin:0;color:#000">契約總價 <input type="text" id="estTotal" style="width:150px" placeholder="輸入後才會算進度"></label>
+      <label class="chk" style="display:inline-flex;align-items:center;gap:6px;margin:0;color:#000">契約總價 <input type="text" id="estTotal" style="width:150px" placeholder="輸入契約總價（元）"></label>
       <label class="chk" style="display:inline-flex;align-items:center;gap:6px;margin:0;color:#000">保留款率 土建 <input type="text" id="rateL" style="width:46px">% 機電 <input type="text" id="rateQ" style="width:46px">%</label>
       <span class="sp"></span>
       <button class="ghost" id="estExport">匯出 Excel</button>
@@ -1042,7 +1042,7 @@ function renderEst(){
   let h=`<table id="estsheet"><thead><tr><th>期數</th><th>日期</th><th>土建廠商估驗</th><th>機電廠商估驗</th><th>總估驗金額</th><th>保留款</th><th>物價調整款</th><th>懲罰性違約金</th><th>實付金額</th><th>累積估驗金額</th><th>累積實付金額(E+F)</th><th>估驗進度</th><th>核對</th><th></th></tr></thead><tbody>`;
   rows.forEach(r=>{
     h+=`<tr data-n="${r.n}"><td class="c">${r.n}</td>${txt(r,'month','c')}${num(r,'lm')}${num(r,'qb')}<td class="r calc">${money(r.E)}</td><td class="r calc${r.flags&&r.flags.ret?' badc':''}">${money(r.ret)}</td>${num(r,'adj')}${num(r,'pen')}`
-     + `<td class="r b calc">${money(r.I)}</td><td class="r cum">${money(r.J)}</td><td class="r cum">${money(r.K)}</td><td class="r cum">${r.L==null?'':(r.L*100).toFixed(2)+'%'}</td>`
+     + `<td class="r b calc">${money(r.I)}</td><td class="r cum calc">${money(r.J)}</td><td class="r cum calc">${money(r.K)}</td><td class="r cum calc">${r.L==null?'<span style="font-size:11px">請先輸入契約總價</span>':(r.L*100).toFixed(2)+'%'}</td>`
      + `<td class="chk ${r.chk&&r.chk.length?'bad':''}">${r.chk&&r.chk.length?hx(r.chk.join('；')):(r.checked?'✓':'')}</td><td><button class="ghost" data-del="${r.n}" title="刪除這一期">刪</button></td></tr>`;
   });
   box.innerHTML=h+'</tbody></table>'; box.scrollTop=keep;
