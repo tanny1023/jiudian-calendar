@@ -49,7 +49,7 @@ button.ghost:hover{border-color:var(--accent)}
 #sheet textarea{display:block;width:100%;min-height:26px;border:0;border-radius:0;background:transparent;color:#000;
   padding:4px 6px;font:inherit;line-height:1.4;resize:none;overflow:hidden;field-sizing:content}
 #sheet textarea:focus{outline:2px solid var(--accent);outline-offset:-2px;background:#fffef0}
-#p2,#p3{max-width:1100px}
+#p2,#p3,#p5{max-width:1100px}
 #estbox{overflow:auto;max-height:calc(100vh - 330px);border:1px solid #000;background:#fff}
 #estsheet{border-collapse:separate;border-spacing:0;font-size:14px;color:#000;background:#fff;white-space:nowrap}
 #estsheet th{position:sticky;top:0;z-index:2;background:#fff;border-right:1px solid #000;border-bottom:2px solid #000;padding:5px 8px;text-align:center;font-weight:700}
@@ -108,6 +108,7 @@ details summary{cursor:pointer;color:var(--sub);font-size:13px;margin-top:6px}
     <button id="t2" aria-pressed="false">雙週大事紀</button>
     <button id="t3" aria-pressed="false">應辦事項管控表</button>
     <button id="t4" aria-pressed="false">估驗計價</button>
+    <button id="t5" aria-pressed="false">土地公表</button>
   </div>
 
   <!-- ========== 行事曆 ========== -->
@@ -228,6 +229,35 @@ details summary{cursor:pointer;color:var(--sub);font-size:13px;margin-top:6px}
     </div>
     <div id="estbox"></div>
     <p class="hint">每一期只要填 5 格：土建廠商估驗、機電廠商估驗、土建物調實付、機電物調實付（說明四各家的「實付款項」）、懲罰性違約金（填負數）。總估驗金額、保留款、物價調整款（兩家物調實付相加）（土建 2%、機電 4%，四捨五入）、實付金額、累積與進度都是公式自動算；<span style="color:#d00000">紅字</span>是公式算出來的、<span style="background:#dff3dc">淺綠底</span>是累積欄位；上傳 PDF 時會和公文的保留款、實付金額核對，對不上的格子標黃底。數字格可輸入算式（例：-145804+3311）。</p>
+  </section>
+  <!-- ========== 土地公表 ========== -->
+  <section id="p5" hidden>
+    <div class="card" style="margin-bottom:14px">
+      <p class="hint" style="margin-top:0">自動更新土地公重大工程表裡「臺中市巨蛋體育館興建工程」那一列的：估驗進度、最新施工進度、建工辦況、更新日期。其他格子與格式都不動。檔案只在這台電腦的瀏覽器裡處理。</p>
+      <label for="l_base">① 土地公重大工程表（待更新的原始檔，Excel）</label>
+      <input type="file" id="l_base" accept=".xlsx">
+      <div class="hint" id="l_baseInfo"></div>
+      <label for="l_log">② 施工日誌（貼上全文：抓「累積預定進度／累積實際進度」，也是整理辦況的來源）</label>
+      <textarea id="l_log" rows="6" placeholder="貼上最新一份施工日誌"></textarea>
+      <div class="btnrow"><button class="ghost" id="l_sum">整理成簡要辦況</button><span class="status" id="l_sumMsg" style="align-self:center"></span></div>
+      <label for="l_ban">③ 簡要辦況（整理後會出現在這裡，可直接修改；會寫進表格的「備註-工程」）</label>
+      <textarea id="l_ban" rows="9" placeholder="按上面的「整理成簡要辦況」，或自己貼上"></textarea>
+      <details style="margin-top:6px"><summary>上一期辦況（Excel 目前的內容，整理時會拿來當寫法參考）</summary><textarea id="l_prev" rows="6"></textarea></details>
+      <div class="row2" style="margin-top:6px">
+        <div><label for="l_est">④ 估驗進度（%）<span class="hint" id="l_estHint"></span></label><input type="number" id="l_est" step="0.01" placeholder="例如 16.60"></div>
+        <div><label for="l_upd">⑤ 更新日期（空白＝不改）</label><input type="text" id="l_upd" placeholder="例如 115年10月20日"></div>
+      </div>
+      <details id="l_set" style="margin-top:8px"><summary>設定：Gemini API 金鑰（「整理成簡要辦況」要用，只存在這台電腦）</summary>
+        <div class="row2"><div><label for="l_key">API 金鑰</label><input type="password" id="l_key" autocomplete="off" placeholder="到 aistudio.google.com/apikey 免費申請"></div>
+        <div><label for="l_model">模型</label><input type="text" id="l_model"></div></div>
+      </details>
+      <div class="btnrow"><button class="primary" id="l_go">產生更新後的土地公表</button></div>
+    </div>
+    <div class="notes" id="l_result" hidden>
+      <h3>處理結果</h3>
+      <ul id="l_report"></ul>
+      <a id="l_dl" style="display:none;text-decoration:none;margin-top:6px;border-radius:8px;padding:9px 16px;background:var(--ok);color:var(--accent-ink)">下載 Excel</a>
+    </div>
   </section>
 </div>
 
@@ -785,13 +815,14 @@ function fitOut(){ const o=$('out'); o.style.height='auto'; o.style.height=Math.
 
 /* ---------- 事件 ---------- */
 function setPane(n){
-  $('p1').hidden = n!==1; $('p2').hidden = n!==2; $('p3').hidden = n!==3; $('p4').hidden = n!==4;
-  $('t1').setAttribute('aria-pressed',n===1); $('t2').setAttribute('aria-pressed',n===2); $('t3').setAttribute('aria-pressed',n===3); $('t4').setAttribute('aria-pressed',n===4);
+  $('p1').hidden = n!==1; $('p2').hidden = n!==2; $('p3').hidden = n!==3; $('p4').hidden = n!==4; $('p5').hidden = n!==5;
+  $('t1').setAttribute('aria-pressed',n===1); $('t2').setAttribute('aria-pressed',n===2); $('t3').setAttribute('aria-pressed',n===3); $('t4').setAttribute('aria-pressed',n===4); $('t5').setAttribute('aria-pressed',n===5);
   store.set('jd_pane',String(n));
   if(n===2) gen();
+  if(n===5 && window.landRefresh) window.landRefresh();
   if(n===1){ const go=()=>scrollToKey(addDays(todayKey(),-1)); requestAnimationFrame(go); if(!window._sc){ window._sc=1; setTimeout(go,150); } }
 }
-$('t1').onclick=()=>setPane(1); $('t2').onclick=()=>setPane(2); $('t3').onclick=()=>setPane(3); $('t4').onclick=()=>setPane(4);
+$('t1').onclick=()=>setPane(1); $('t2').onclick=()=>setPane(2); $('t3').onclick=()=>setPane(3); $('t4').onclick=()=>setPane(4); $('t5').onclick=()=>setPane(5);
 $('month').addEventListener('change',()=>{ if($('month').value) setMonth($('month').value); });
 $('goToday').onclick=()=>{ const t=todayKey(); $('month').value=t.slice(0,7); scrollToKey(addDays(t,-1)); };
 $('btnAddCol').onclick=()=>{ mcolsN=mcols()+1; store.set('jd_mcols',String(mcolsN)); renderCal(); };
@@ -1342,7 +1373,7 @@ function saveEstLocal(){ store.set('jd_est',JSON.stringify(est)); store.set('jd_
   $('noise').value = store.get('jd_noise',DEFAULT_NOISE.join('\n'));
   const s = store.get('jd_start',''); setRange(s||mondayOf(todayKey()));
   renderCal();
-  setPane({'2':2,'3':3,'4':4}[store.get('jd_pane','1')]||1);
+  setPane({'2':2,'3':3,'4':4,'5':5}[store.get('jd_pane','1')]||1);
 })();
 /* ---------- 應辦事項管控表 ---------- */
 (function(){
@@ -1489,6 +1520,110 @@ g('c_go').onclick=async()=>{
   }catch(e){ g('c_report').innerHTML=`<li class="warn">${String(e.message||e).replace(/</g,'&lt;')}</li>`; console.error(e); }
   finally{ btn.disabled=false; btn.textContent='產生更新後的管控表'; }
 };
+})();
+/* ---------- 土地公重大工程表 ---------- */
+(function(){
+const g = id => document.getElementById(id);
+let base = null;     // {wb, ws, row, cols:{est,prog,note}, name}
+const flat = v => { if(v==null) return ''; if(typeof v==='object'){ if(v.richText) return v.richText.map(r=>r.text).join(''); if(v.result!=null) return String(v.result); if(v.text!=null) return String(v.text); } return String(v); };
+const pct = (t,label) => { const m=new RegExp(label+'[：:]\\s*([\\d.]+)\\s*%').exec(t||''); return m?parseFloat(m[1]):null; };
+
+g('l_key').value = store.get('jd_gkey','');
+g('l_model').value = store.get('jd_gmodel','gemini-3.6-flash');
+g('l_key').addEventListener('change',()=>store.set('jd_gkey',g('l_key').value.trim()));
+g('l_model').addEventListener('change',()=>store.set('jd_gmodel',g('l_model').value.trim()));
+
+window.landRefresh = () => {              // 估驗進度：取估驗計價分頁最新一期的累積進度
+  const rows=estCalc(), last=rows[rows.length-1];
+  if(last && last.L!=null){ if(!g('l_est').dataset.edited) g('l_est').value=(last.L*100).toFixed(2); g('l_estHint').textContent=`（取自估驗計價第 ${last.n} 期的累積進度）`; }
+  else g('l_estHint').textContent='（估驗計價分頁還沒輸入契約總價，請手動輸入或先到估驗計價輸入）';
+};
+g('l_est').addEventListener('input',()=>{ g('l_est').dataset.edited='1'; });
+
+async function loadBase(file){
+  const wb=new ExcelJS.Workbook(); await wb.xlsx.load(await file.arrayBuffer());
+  const ws=wb.getWorksheet('總表')||wb.worksheets[0];
+  const colOf=(row,test)=>{ const r=ws.getRow(row); for(let c=1;c<=80;c++) if(test(flat(r.getCell(c).value))) return c; return 0; };
+  const cols={ est:colOf(2,t=>t.replace(/\s/g,'')==='估驗進度'), prog:colOf(3,t=>t.includes('最新施工進度')), note:colOf(2,t=>t.startsWith('備註-工程')), name:colOf(2,t=>t.replace(/\s/g,'')==='計畫內容') };
+  if(!cols.est||!cols.prog||!cols.note||!cols.name) throw new Error('在「總表」找不到「估驗進度／最新施工進度／備註-工程」欄位，請確認是土地公重大工程表');
+  let row=0; for(let r=4;r<=ws.rowCount;r++){ if(flat(ws.getRow(r).getCell(cols.name).value).includes('巨蛋體育館興建工程')){ row=r; break; } }
+  if(!row) throw new Error('在「總表」找不到「臺中市巨蛋體育館興建工程」那一列');
+  return {wb,ws,row,cols,name:file.name};
+}
+g('l_base').addEventListener('change',async e=>{
+  const f=e.target.files[0]; base=null; g('l_baseInfo').textContent=''; if(!f) return;
+  g('l_baseInfo').textContent='讀取中…（檔案較大，約需幾秒）';
+  try{
+    base=await loadBase(f);
+    const prev=flat(base.ws.getCell(base.row,base.cols.note).value), upd=flat(base.ws.getCell(1,base.cols.note).value);
+    g('l_prev').value=prev; if(!g('l_upd').value) g('l_upd').value=upd.replace(/^更新日期[：:]\s*/,'');
+    g('l_baseInfo').textContent=`已讀取：巨蛋在第 ${base.row} 列（目前辦況與更新日期已帶入下方）`;
+  }catch(err){ g('l_baseInfo').textContent='⚠ '+(err.message||err); }
+});
+
+g('l_sum').onclick = async ()=>{
+  const log=g('l_log').value.trim(), key=g('l_key').value.trim(), model=g('l_model').value.trim()||'gemini-3.6-flash';
+  const out=g('l_sumMsg'); out.textContent=''; out.className='status';
+  if(!log){ out.textContent='請先貼上施工日誌'; out.className='status err'; return; }
+  if(!key){ out.textContent='整理辦況要用 Gemini，請先在下方「設定」貼上 Gemini API 金鑰（到 aistudio.google.com/apikey 免費申請）'; out.className='status err'; g('l_set').open=true; return; }
+  const btn=g('l_sum'); btn.disabled=true; btn.textContent='整理中…';
+  try{
+    const prev=g('l_prev').value.trim();
+    const prompt=`你是營建工程秘書，要把「施工日誌」整理成土地公重大工程列管表的「建工辦況」。\n`
+      +`只輸出辦況本文，不要任何說明或markdown。格式必須完全如下：\n建工辦況：\n(1)鋼構：…\n(2)B1F層：…\n(3)B2F層：…\n(4)B3F層：…\n（115/10/15）\n`
+      +`規則：\n1. 依「鋼構」「各樓層（由上到下，例如B1F、B2F、B3F，有幾層寫幾層）」分組，每組一個編號(1)(2)…。\n`
+      +`2. 每組只寫當天實際施工的項目，把「區域＋作業內容」合成一句（例：N1區牆模板拆除），不同項目用「、」連接，樓層組最後加「作業。」，鋼構組不加句號。\n`
+      +`3. 不要寫數量、人數、材料、機具、天氣、安全衛生事項。\n`
+      +`4. 最後一行是施工日誌的填表日期，用民國年/月/日，格式（115/10/15）。\n`
+      +(prev?`\n【上一期辦況，請模仿它的寫法與用詞】\n${prev}\n`:'')
+      +`\n【施工日誌】\n${log}`;
+    const resp=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0.2}})});
+    const j=await resp.json();
+    if(!resp.ok) throw new Error((j.error&&j.error.message)||('HTTP '+resp.status));
+    const t=(((j.candidates||[])[0]||{}).content||{parts:[]}).parts.map(p=>p.text||'').join('').trim().replace(/^```[a-z]*\n?|```$/g,'').trim();
+    if(!t) throw new Error('Gemini 沒有回傳內容');
+    g('l_ban').value=t; out.textContent='已整理，請檢查後再按「產生」（可直接修改框內文字）'; out.className='status ok';
+  }catch(e){ out.textContent='整理失敗：'+(e.message||e); out.className='status err'; }
+  finally{ btn.disabled=false; btn.textContent='整理成簡要辦況'; }
+};
+
+async function run(){
+  if(!base) throw new Error('請先上傳土地公重大工程表（Excel）');
+  const {ws,row,cols}=base, report=[], C=(c)=>ws.getCell(row,c);
+  const log=g('l_log').value, pp=pct(log,'累積預定進度'), ap=pct(log,'累積實際進度');
+  if(pp!=null && ap!=null){ C(cols.prog).value=`預定進度${pp.toFixed(2)}%\n實際進度${ap.toFixed(2)}%`; report.push(`最新施工進度：預定 ${pp.toFixed(2)}%、實際 ${ap.toFixed(2)}%`); }
+  else report.push(g('l_log').value.trim()?'⚠ 施工日誌找不到「累積預定進度／累積實際進度」，最新施工進度未更新':'（沒貼施工日誌，最新施工進度未更新）');
+  const est=parseFloat(g('l_est').value);
+  if(!isNaN(est)){ C(cols.est).value=Math.round(est*100)/1e4; report.push(`估驗進度：${est.toFixed(2)}%`); } else report.push('（估驗進度未填，未更新）');
+  const ban=g('l_ban').value.trim();
+  if(ban){
+    const body=ban.replace(/^建工辦況[：:]\s*\n?/,''), old=C(cols.note).value;
+    const runs=old&&old.richText?old.richText:[];
+    const f0=runs[0]&&runs[0].font, f1=(runs[1]&&runs[1].font)||{name:'標楷體',size:24,color:{argb:'FFFF0000'}};
+    C(cols.note).value={richText:[{text:'建工辦況：\n',font:f0||{name:'標楷體',size:24}},{text:body,font:f1}]};
+    report.push('辦況：已更新（共 '+body.split('\n').length+' 行）');
+  } else report.push('（辦況框是空的，辦況未更新）');
+  const upd=g('l_upd').value.trim();
+  if(upd){ ws.getCell(1,cols.note).value='更新日期：'+upd.replace(/^更新日期[：:]\s*/,''); report.push('更新日期：'+upd); }
+  base.wb.calcProperties={fullCalcOnLoad:true};
+  const buf=await base.wb.xlsx.writeBuffer();
+  const name=base.name.includes('待更新')?base.name.replace('待更新','巨蛋更新'):base.name.replace(/\.xlsx$/i,'-巨蛋更新.xlsx');
+  return {report,buf,name};
+}
+g('l_go').onclick=async()=>{
+  const btn=g('l_go'); btn.disabled=true; btn.textContent='處理中…';
+  g('l_result').hidden=false; g('l_report').innerHTML=''; g('l_dl').style.display='none';
+  try{
+    const r=await run();
+    g('l_report').innerHTML=r.report.map(t=>`<li class="${t.startsWith('⚠')?'warn':''}">${t.replace(/</g,'&lt;')}</li>`).join('');
+    const a=g('l_dl'); if(a.href.startsWith('blob:')) URL.revokeObjectURL(a.href);
+    a.href=URL.createObjectURL(new Blob([r.buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+    a.download=r.name; a.style.display='inline-block';
+  }catch(e){ g('l_report').innerHTML=`<li class="warn">${String(e.message||e).replace(/</g,'&lt;')}</li>`; console.error(e); }
+  finally{ btn.disabled=false; btn.textContent='產生更新後的土地公表'; }
+};
+window._land={loadBase,run,getBase:()=>base,setBase:b=>{base=b;}};
 })();
 </script>
 </body>
