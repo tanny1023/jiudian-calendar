@@ -414,7 +414,7 @@ function setCell(k,c,v){
 
 /* ---------- 行事曆畫面（Excel 樣式） ---------- */
 const hx = t => String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-const COLW = [96,96,70,440,300,260,320,280];
+const COLW = [64,96,70,340,300,260,320,280];
 function sheetRange(){
   const ks=Object.keys(days).sort(); let a='2026-03-01', b='2026-12-31';
   if(ks.length){ if(ks[0]<a) a=ks[0]; if(ks[ks.length-1]>b) b=ks[ks.length-1]; }
