@@ -864,7 +864,7 @@ $('rules').addEventListener('change',e=>{
   const el=e.target, tr=el.closest('tr'); if(!tr||!el.dataset.k) return;
   const r=rules[+tr.dataset.i], k=el.dataset.k;
   if(k==='seq'){
-    if(el.checked){ if(!r.t.includes('{n}')) r.t='第{n}次'+r.t; r.nm=r.nm||'before'; r.sn=r.sn||1; }
+    if(el.checked){ r.t=r.t.replace(/^第?\{m\}次/,'第{n}次'); if(!r.t.includes('{n}')) r.t='第{n}次'+r.t; r.nm=r.nm||'before'; r.sn=r.sn||1; }
     else r.t=r.t.replace(/第\{n\}次/g,'').replace(/\{n\}/g,'');
     saveRules(); renderRules(); return;
   }
