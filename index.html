@@ -853,6 +853,7 @@ function renderRules(){
         ${(wk||r.c==='mlast')?`<select data-k="wd">${opt(WDN.map((l,v)=>[v,l]),r.wd==null?3:r.wd)}</select>`:''}
         ${multi?`<label style="margin:0;display:flex;align-items:center;gap:3px;color:#000">其中一次<input type="date" data-k="a" value="${r.a||''}"></label>`:''}
         ${r.c==='mday'?`<label style="margin:0;display:flex;align-items:center;gap:3px;color:#000">每月<input type="number" data-k="day" min="1" max="31" value="${r.day||1}" style="width:56px">日</label>`:''}
+        ${r.f==='m'?`<label style="margin:0;display:flex;align-items:center;gap:3px;color:#000" title="勾選後內容會自動加上「第{n}次」，屆次從日曆上的舊紀錄接續"><input type="checkbox" data-k="seq"${num?' checked':''}>屆次接續</label>`:''}
         ${num?`<select data-k="nm" title="屆次從哪裡接續">${opt([['before','屆次接續：起算日前最後一次'],['last','屆次接續：日曆上最後一次']],r.nm||'before')}</select><label style="margin:0;display:flex;align-items:center;gap:3px;color:#000" title="日曆上找不到舊紀錄時，第一次的屆次">起始<input type="number" data-k="sn" min="1" value="${r.sn||1}" style="width:60px"></label>`:''}
       </div></td>
       <td><select data-k="d">${opt([['prev','前一個上班日'],['next','後一個上班日'],['skip','跳過'],['none','不調整']],r.d||'prev')}</select></td>
@@ -862,6 +863,11 @@ function renderRules(){
 $('rules').addEventListener('change',e=>{
   const el=e.target, tr=el.closest('tr'); if(!tr||!el.dataset.k) return;
   const r=rules[+tr.dataset.i], k=el.dataset.k;
+  if(k==='seq'){
+    if(el.checked){ if(!r.t.includes('{n}')) r.t='第{n}次'+r.t; r.nm=r.nm||'before'; r.sn=r.sn||1; }
+    else r.t=r.t.replace(/第\{n\}次/g,'').replace(/\{n\}/g,'');
+    saveRules(); renderRules(); return;
+  }
   r[k] = el.type==='checkbox' ? (el.checked?1:0) : (['wd','day','sn'].includes(k) ? +el.value : el.value);
   saveRules();
   if(k==='c'&&/^w[234]$/.test(r.c)&&!r.a){ let d=todayKey(); while(wdOf(d)!==(r.wd==null?3:r.wd)) d=addDays(d,1); r.a=d; saveRules(); }
