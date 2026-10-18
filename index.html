@@ -198,6 +198,10 @@ details summary{cursor:pointer;color:var(--sub);font-size:13px;margin-top:6px}
       <input type="file" id="c_base" accept=".xlsx">
       <label for="c_log">② 施工日誌（貼上全文，抓「累積預定進度／累積實際進度」）</label>
       <textarea id="c_log" rows="6" placeholder="貼上最新一份施工日誌"></textarea>
+      <div class="btnrow"><button class="ghost" id="c_sum">整理成簡要辦況</button><span class="status" id="c_sumMsg" style="align-self:center"></span></div>
+      <label for="c_ban">簡要辦況（按上面的按鈕整理後出現在這裡，可直接修改）</label>
+      <textarea id="c_ban" rows="7" placeholder="按上面的「整理成簡要辦況」"></textarea>
+      <div class="btnrow"><button class="ghost" id="c_banCopy">複製簡要辦況</button></div>
       <label for="c_pdf">③ 工進品質暨職安管制協調會議紀錄（PDF）</label>
       <input type="file" id="c_pdf" accept=".pdf">
       <p class="hint">更新「壹」的三張送審表；原有的契約圖說釋疑整批移到「叁、上週解除列管」（辦畢時間＝辦理期限），本週提送的列入「貳」。</p>
@@ -1678,6 +1682,18 @@ g('l_go').onclick=async()=>{
   finally{ btn.disabled=false; btn.textContent='產生更新後的土地公表'; }
 };
 window._land={summarizeLog,loadBase,run,getBase:()=>base,setBase:b=>{base=b;}};
+})();
+/* 應辦事項管控表：同樣的「整理成簡要辦況」 */
+(function(){
+  const g=id=>document.getElementById(id);
+  g('c_sum').onclick=()=>{
+    const out=g('c_sumMsg'), log=g('c_log').value.trim(); out.textContent=''; out.className='status';
+    if(!log){ out.textContent='請先貼上施工日誌'; out.className='status err'; return; }
+    const t=window._land.summarizeLog(log);
+    if(!t){ out.textContent='施工日誌裡找不到施工項目，請確認有貼到「依施工計畫書執行按圖施工概況」那一段'; out.className='status err'; return; }
+    g('c_ban').value=t; out.textContent='已整理，可直接修改框內文字或按「複製簡要辦況」'; out.className='status ok';
+  };
+  g('c_banCopy').onclick=async()=>{ const ok=await copyText(g('c_ban').value); g('c_sumMsg').textContent=ok?'已複製簡要辦況':'複製失敗，請手動選取'; g('c_sumMsg').className='status'+(ok?' ok':' err'); };
 })();
 </script>
 </body>
