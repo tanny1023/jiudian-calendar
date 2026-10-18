@@ -201,15 +201,13 @@ details summary{cursor:pointer;color:var(--sub);font-size:13px;margin-top:6px}
       <label for="c_pdf">③ 工進品質暨職安管制協調會議紀錄（PDF）</label>
       <input type="file" id="c_pdf" accept=".pdf">
       <p class="hint">更新「壹」的三張送審表；原有的契約圖說釋疑整批移到「叁、上週解除列管」（辦畢時間＝辦理期限），本週提送的列入「貳」。</p>
-      <label for="c_sel">選擇估驗期數（自動帶入下面的估驗期數與估驗進度，資料取自「估驗計價」分頁）</label>
-      <select id="c_sel" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:inherit"></select>
-      <div class="hint" id="c_selHint"></div>
       <div class="row2" style="grid-template-columns:repeat(3,1fr)">
         <div><label for="c_date">④ 填表日期</label><input type="text" id="c_date"></div>
-        <div><label for="c_period">估驗期數</label><input type="number" id="c_period" placeholder="例如 27"></div>
+        <div><label for="c_period">估驗期數</label><select id="c_period" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:inherit"></select></div>
         <div><label for="c_est">估驗進度（%）</label><input type="number" id="c_est" step="0.001" placeholder="例如 15.42"></div>
       </div>
-      <p class="hint">估驗期數、估驗進度留空＝沿用底稿上的值。</p>
+      <div class="hint" id="c_selHint"></div>
+      <p class="hint">估驗期數選「沿用底稿」、估驗進度留空＝沿用底稿上的值；選了期數會自動帶入該期的累積估驗進度（資料取自「估驗計價」分頁）。</p>
       <div class="btnrow"><button class="primary" id="c_go">產生更新後的管控表</button></div>
     </div>
     <div class="notes" id="c_result" hidden>
@@ -1372,15 +1370,15 @@ function saveEstLocal(){ store.set('jd_est',JSON.stringify(est)); store.set('jd_
 
 /* 應辦事項管控表：用下拉選單選估驗期數，自動帶入期數與估驗進度 */
 function refreshEstSelect(){
-  const sel=$('c_sel'), cur=sel.value, rows=estCalc();
-  sel.innerHTML='<option value="">沿用底稿上的值（不更新）</option>'+rows.slice().reverse().map(r=>`<option value="${r.n}">第 ${r.n} 期（${r.month||''}）累積估驗進度 ${r.L==null?'—':(r.L*100).toFixed(2)+'%'}</option>`).join('');
+  const sel=$('c_period'), cur=sel.value, rows=estCalc();
+  sel.innerHTML='<option value="">沿用底稿上的值（不更新）</option>'+rows.slice().reverse().map(r=>`<option value="${r.n}">第 ${r.n} 期（${r.month||''}）</option>`).join('');
   sel.value=rows.some(r=>String(r.n)===cur)?cur:'';
 }
-$('c_sel').addEventListener('change',()=>{
-  const r=estCalc().find(x=>String(x.n)===$('c_sel').value), h=$('c_selHint');
-  if(!r){ $('c_period').value=''; $('c_est').value=''; h.textContent=''; return; }
-  $('c_period').value=r.n; $('c_est').value=r.L==null?'':(r.L*100).toFixed(2);
-  h.textContent = r.L==null ? '⚠ 估驗計價分頁還沒輸入契約總價，算不出估驗進度，請先輸入或手動填下面的估驗進度' : `已帶入：第 ${r.n} 期、估驗進度 ${(r.L*100).toFixed(2)}%`;
+$('c_period').addEventListener('change',()=>{
+  const r=estCalc().find(x=>String(x.n)===$('c_period').value), h=$('c_selHint');
+  if(!r){ $('c_est').value=''; h.textContent=''; return; }
+  $('c_est').value=r.L==null?'':(r.L*100).toFixed(2);
+  h.textContent = r.L==null ? '⚠ 估驗計價分頁還沒輸入契約總價，算不出估驗進度，請先輸入或手動填估驗進度' : `已帶入第 ${r.n} 期的累積估驗進度 ${(r.L*100).toFixed(2)}%`;
 });
 
 /* ---------- 初始化 ---------- */
