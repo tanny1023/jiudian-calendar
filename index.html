@@ -243,17 +243,12 @@ details summary{cursor:pointer;color:var(--sub);font-size:13px;margin-top:6px}
       <label for="l_log">② 施工日誌（貼上全文：抓「累積預定進度／累積實際進度」，也是整理辦況的來源）</label>
       <textarea id="l_log" rows="6" placeholder="貼上最新一份施工日誌"></textarea>
       <div class="btnrow"><button class="ghost" id="l_sum">整理成簡要辦況</button><span class="status" id="l_sumMsg" style="align-self:center"></span></div>
-      <label for="l_ban">③ 簡要辦況（整理後會出現在這裡，可直接修改；會寫進表格的「備註-工程」）</label>
+      <label for="l_ban">③ 簡要辦況（按上面的按鈕整理後出現在這裡，可直接修改；會寫進表格的「備註-工程」）</label>
       <textarea id="l_ban" rows="9" placeholder="按上面的「整理成簡要辦況」，或自己貼上"></textarea>
-      <details style="margin-top:6px"><summary>上一期辦況（Excel 目前的內容，整理時會拿來當寫法參考）</summary><textarea id="l_prev" rows="6"></textarea></details>
       <div class="row2" style="margin-top:6px">
         <div><label for="l_est">④ 估驗進度（%）<span class="hint" id="l_estHint"></span></label><input type="number" id="l_est" step="0.01" placeholder="例如 16.60"></div>
         <div><label for="l_upd">⑤ 更新日期（空白＝不改）</label><input type="text" id="l_upd" placeholder="例如 115年10月20日"></div>
       </div>
-      <details id="l_set" style="margin-top:8px"><summary>設定：Gemini API 金鑰（「整理成簡要辦況」要用，只存在這台電腦）</summary>
-        <div class="row2"><div><label for="l_key">API 金鑰</label><input type="password" id="l_key" autocomplete="off" placeholder="到 aistudio.google.com/apikey 免費申請"></div>
-        <div><label for="l_model">模型</label><input type="text" id="l_model"></div></div>
-      </details>
       <div class="btnrow"><button class="primary" id="l_go">產生更新後的土地公表</button></div>
     </div>
     <div class="notes" id="l_result" hidden>
@@ -1551,11 +1546,6 @@ let base = null;     // {wb, ws, row, cols:{est,prog,note}, name}
 const flat = v => { if(v==null) return ''; if(typeof v==='object'){ if(v.richText) return v.richText.map(r=>r.text).join(''); if(v.result!=null) return String(v.result); if(v.text!=null) return String(v.text); } return String(v); };
 const pct = (t,label) => { const m=new RegExp(label+'[：:]\\s*([\\d.]+)\\s*%').exec(t||''); return m?parseFloat(m[1]):null; };
 
-g('l_key').value = store.get('jd_gkey','');
-g('l_model').value = store.get('jd_gmodel','gemini-3.6-flash');
-g('l_key').addEventListener('change',()=>store.set('jd_gkey',g('l_key').value.trim()));
-g('l_model').addEventListener('change',()=>store.set('jd_gmodel',g('l_model').value.trim()));
-
 window.landRefresh = () => {              // 估驗進度：取估驗計價分頁最新一期的累積進度
   const rows=estCalc(), last=rows[rows.length-1];
   if(last && last.L!=null){ if(!g('l_est').dataset.edited) g('l_est').value=(last.L*100).toFixed(2); g('l_estHint').textContent=`（取自估驗計價第 ${last.n} 期的累積進度）`; }
@@ -1578,37 +1568,80 @@ g('l_base').addEventListener('change',async e=>{
   g('l_baseInfo').textContent='讀取中…（檔案較大，約需幾秒）';
   try{
     base=await loadBase(f);
-    const prev=flat(base.ws.getCell(base.row,base.cols.note).value), upd=flat(base.ws.getCell(1,base.cols.note).value);
-    g('l_prev').value=prev; if(!g('l_upd').value) g('l_upd').value=upd.replace(/^更新日期[：:]\s*/,'');
-    g('l_baseInfo').textContent=`已讀取：巨蛋在第 ${base.row} 列（目前辦況與更新日期已帶入下方）`;
+    const upd=flat(base.ws.getCell(1,base.cols.note).value);
+    if(!g('l_upd').value) g('l_upd').value=upd.replace(/^更新日期[：:]\s*/,'');
+    g('l_baseInfo').textContent=`已讀取：巨蛋在第 ${base.row} 列（更新日期已帶入下方）`;
   }catch(err){ g('l_baseInfo').textContent='⚠ '+(err.message||err); }
 });
 
-g('l_sum').onclick = async ()=>{
-  const log=g('l_log').value.trim(), key=g('l_key').value.trim(), model=g('l_model').value.trim()||'gemini-3.6-flash';
-  const out=g('l_sumMsg'); out.textContent=''; out.className='status';
+// 施工日誌 → 簡要辦況（規則：清洗排除 → 樓層歸類 → 排序彙整 → 排版）
+const LVL = f => { if(f==='RF') return 100; const m=/^(B?)(\d+)F$/.exec(f); return m?(m[1]?-1:1)*(+m[2]):0; };
+const REGIONS = ['N1','N2','N3','S1','S2','S3'];
+const EXC_WORK = /灑水|養護|物料整理|吊掛|運送|搬運|安全網|防護網|施工架|延伸架|鷹架|重型支撐架|滿鋪踏板|臨時|電盤|用電箱|照明|電源線|安全監測/;
+const EXC_NOTE = /查驗|取樣|會同|召開|說明會|試驗|勤前|教育訓練|簽章|審查|檢討|會議|巡檢|巡查|督導|天氣|施工前檢查|新進勞工|防護具/;
+const WORK_RE  = /組立|拆除|綁紮|澆置|澆灌|安裝|吊裝|配管|施作|銲|焊|鋪設|整平|搭設|封模|灌漿|防水|開挖|回填|切割|鑿|植筋|預埋|模板|鋼筋|混凝土|斜撐|套管|組裝|裝設|砌磚|粉刷|止水|填縫|鋪裝|吊放/;
+const REBAR = /筋/;
+function cleanItem(s){
+  s=s.replace(/^\s*(?:[（(]?\d+[)）.、．]|[①-⑳]|[一二三四五六七八九十]+[、.])\s*/,'');   // 項次
+  let prev; do{ prev=s; s=s.replace(/[（(][^（()）]*[)）]/g,''); }while(s!==prev);       // 刪括號與內文（含巢狀）
+  s=s.replace(/共\s*\d+\s*人/g,'').replace(/\d+\s*人(?![一-龥])/g,'');          // 刪施工人數
+  const toks=s.trim().split(/\s+/);                                                       // 去掉表格尾端的單位／數量欄
+  while(toks.length>1 && /^(?:[\d,.]+|m2|m3|㎡|式|噸|組|支|只|座|處|%|--?)$/i.test(toks[toks.length-1])) toks.pop();
+  return toks.join('').replace(/[。，,；;:：]+$/,'');
+}
+function summarizeLog(text){
+  let seg=text||'';
+  const a=seg.search(/依施工計畫書|本日施工(?:項目|概況)|施工概況/), b=seg.search(/二[、.]\s*工地材料|工地材料管理/);
+  if(a>=0 && b>a) seg=seg.slice(a,b);
+  const items=[]; let ctxFloor=null;
+  for(const rawLine of seg.split(/\n+/)){
+    const line=rawLine.trim(); if(!line) continue;
+    for(const part of line.split(/[;；]/).flatMap(x=>x.split(/、(?=(?:[NS]\d區|B\d+F|\d+F|鋼構|[A-Z]車道|[A-Z]區))/))){
+      const c=cleanItem(part); if(!c) continue;
+      const floors=[...c.matchAll(/B\d+F|\d+F|RF/g)].map(m=>m[0]);
+      if(floors.length && !EXC_NOTE.test(c)) ctxFloor=floors[0];                 // 樓層標題行會沿用到下一個樓層出現為止
+      if(EXC_NOTE.test(c) || EXC_WORK.test(c) || !WORK_RE.test(c)) continue;
+      let cat, txt;
+      if(/鋼構/.test(c)){ cat='鋼構'; txt=c; }
+      else{
+        if(floors.length>=2){
+          const hi=floors.reduce((x,y)=>LVL(y)>LVL(x)?y:x), lo=floors.reduce((x,y)=>LVL(y)<LVL(x)?y:x);
+          if(/澆置|澆灌|混凝土/.test(c)) cat=floors[floors.length-1];          // 澆置：實際澆置的樓層
+          else if(REBAR.test(c) && /版/.test(c)) cat=lo;                         // 版筋：低樓層
+          else if(/梁版|版模|梁|模板/.test(c)) cat=hi;                           // 梁版模：高樓層
+          else cat=floors[0];
+        }else cat=floors[0]||ctxFloor||'其他';
+        txt=c.replace(/(?:B\d+F|\d+F|RF)層?/g,'');
+      }
+      txt=txt.replace(/(?:施作|作業)+$/,'').replace(/^[、，,]+|[、，,]+$/g,'');
+      if(!txt) continue;
+      const rm=/([NS]\d)區/.exec(txt), ri=rm?REGIONS.indexOf(rm[1]):99;
+      items.push({cat,txt,rebar:REBAR.test(txt),ri:ri<0?99:ri});
+    }
+  }
+  const groups={}; items.forEach(it=>{ (groups[it.cat]=groups[it.cat]||[]).push(it); });
+  const cats=Object.keys(groups).sort((x,y)=>{
+    const o=c=>c==='鋼構'?1e6:c==='其他'?-1e6:LVL(c); return o(y)-o(x);
+  });
+  const sortR=arr=>arr.map((x,i)=>[x,i]).sort((p,q)=>p[0].ri-q[0].ri||p[1]-q[1]).map(p=>p[0]);
+  const lines=cats.map((cat,i)=>{
+    const seen=new Set(), list=groups[cat].filter(x=>!seen.has(x.txt)&&seen.add(x.txt));
+    const non=sortR(list.filter(x=>!x.rebar)), reb=sortR(list.filter(x=>x.rebar));
+    reb.forEach(x=>{ x.txt=x.txt.replace(/(?:綁紮|組立|安裝|施作)$/,''); });             // 鋼筋收尾統一寫「鋼筋綁紮作業」
+    const all=non.concat(reb), last=all[all.length-1];
+    const body=all.map(x=>x.txt).join('、')+((reb.length&&/筋$/.test(last.txt))?'綁紮作業。':'作業。');
+    return `(${i+1})${cat==='鋼構'||cat==='其他'?cat:cat+'層'}：${body}`;
+  });
+  if(!lines.length) return '';
+  const dm=/填表日期[：:\s]*(\d{2,3})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/.exec(text||'');
+  return '建工辦況：\n'+lines.join('\n')+(dm?`\n（${dm[1]}/${+dm[2]}/${+dm[3]}）`:'');
+}
+g('l_sum').onclick = ()=>{
+  const out=g('l_sumMsg'), log=g('l_log').value.trim(); out.textContent=''; out.className='status';
   if(!log){ out.textContent='請先貼上施工日誌'; out.className='status err'; return; }
-  if(!key){ out.textContent='整理辦況要用 Gemini，請先在下方「設定」貼上 Gemini API 金鑰（到 aistudio.google.com/apikey 免費申請）'; out.className='status err'; g('l_set').open=true; return; }
-  const btn=g('l_sum'); btn.disabled=true; btn.textContent='整理中…';
-  try{
-    const prev=g('l_prev').value.trim();
-    const prompt=`你是營建工程秘書，要把「施工日誌」整理成土地公重大工程列管表的「建工辦況」。\n`
-      +`只輸出辦況本文，不要任何說明或markdown。格式必須完全如下：\n建工辦況：\n(1)鋼構：…\n(2)B1F層：…\n(3)B2F層：…\n(4)B3F層：…\n（115/10/15）\n`
-      +`規則：\n1. 依「鋼構」「各樓層（由上到下，例如B1F、B2F、B3F，有幾層寫幾層）」分組，每組一個編號(1)(2)…。\n`
-      +`2. 每組只寫當天實際施工的項目，把「區域＋作業內容」合成一句（例：N1區牆模板拆除），不同項目用「、」連接，樓層組最後加「作業。」，鋼構組不加句號。\n`
-      +`3. 不要寫數量、人數、材料、機具、天氣、安全衛生事項。\n`
-      +`4. 最後一行是施工日誌的填表日期，用民國年/月/日，格式（115/10/15）。\n`
-      +(prev?`\n【上一期辦況，請模仿它的寫法與用詞】\n${prev}\n`:'')
-      +`\n【施工日誌】\n${log}`;
-    const resp=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`,{
-      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0.2}})});
-    const j=await resp.json();
-    if(!resp.ok) throw new Error((j.error&&j.error.message)||('HTTP '+resp.status));
-    const t=(((j.candidates||[])[0]||{}).content||{parts:[]}).parts.map(p=>p.text||'').join('').trim().replace(/^```[a-z]*\n?|```$/g,'').trim();
-    if(!t) throw new Error('Gemini 沒有回傳內容');
-    g('l_ban').value=t; out.textContent='已整理，請檢查後再按「產生」（可直接修改框內文字）'; out.className='status ok';
-  }catch(e){ out.textContent='整理失敗：'+(e.message||e); out.className='status err'; }
-  finally{ btn.disabled=false; btn.textContent='整理成簡要辦況'; }
+  const t=summarizeLog(log);
+  if(!t){ out.textContent='施工日誌裡找不到施工項目，請確認有貼到「依施工計畫書執行按圖施工概況」那一段'; out.className='status err'; return; }
+  g('l_ban').value=t; out.textContent='已整理，請檢查後再按「產生」（可直接修改框內文字）'; out.className='status ok';
 };
 
 async function run(){
@@ -1646,7 +1679,7 @@ g('l_go').onclick=async()=>{
   }catch(e){ g('l_report').innerHTML=`<li class="warn">${String(e.message||e).replace(/</g,'&lt;')}</li>`; console.error(e); }
   finally{ btn.disabled=false; btn.textContent='產生更新後的土地公表'; }
 };
-window._land={loadBase,run,getBase:()=>base,setBase:b=>{base=b;}};
+window._land={summarizeLog,loadBase,run,getBase:()=>base,setBase:b=>{base=b;}};
 })();
 </script>
 </body>
