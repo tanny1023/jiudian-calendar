@@ -1647,7 +1647,7 @@ function summarizeLog(text){
     const non=sortR(list.filter(x=>!x.rebar)), reb=sortR(list.filter(x=>x.rebar));
     reb.forEach(x=>{ x.txt=x.txt.replace(/(?:綁紮|組立|安裝|施作)$/,''); });             // 鋼筋收尾統一寫「鋼筋綁紮作業」
     const all=non.concat(reb), last=all[all.length-1];
-    const body=all.map(x=>x.txt).join('、')+(cat==='鋼構'?'':((reb.length&&/筋$/.test(last.txt))?'綁紮作業。':'作業。'));
+    const body=all.map(x=>x.txt).join('、')+((reb.length&&/筋$/.test(last.txt))?'綁紮作業。':'作業。');
     return `(${i+1})${cat==='鋼構'||cat==='其他'?cat:cat+'層'}：${body}`;
   });
   if(!lines.length) return '';
