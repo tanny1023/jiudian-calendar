@@ -1604,7 +1604,9 @@ function cleanItem(s){
 function summarizeLog(text){
   let seg=text||'';
   const a=seg.search(/依施工計畫書|本日施工(?:項目|概況)|施工概況/), b=seg.search(/二[、.]\s*工地材料|工地材料管理/);
-  if(a>=0 && b>a) seg=seg.slice(a,b);
+  const a2=seg.search(/施工工項[：:]/), b2=seg.search(/重要事項/);
+  if(a2>=0 && b2>a2) seg=seg.slice(a2,b2);               // 「三、施工工項」到「四、重要事項」之間
+  else if(a>=0 && b>a) seg=seg.slice(a,b);
   const items=[]; let ctxFloor=null;
   for(const rawLine of seg.split(/\n+/)){
     const line=rawLine.trim(); if(!line) continue;
@@ -1614,7 +1616,7 @@ function summarizeLog(text){
       if(floors.length && !EXC_NOTE.test(c)) ctxFloor=floors[0];                 // 樓層標題行會沿用到下一個樓層出現為止
       if(EXC_NOTE.test(c) || EXC_WORK.test(c) || !WORK_RE.test(c)) continue;
       let cat, txt;
-      if(/鋼構/.test(c)){ cat='鋼構'; txt=c; }
+      if(/鋼構|鋼梁|鋼柱|鋼骨|斜撐|電焊/.test(c)){ cat='鋼構'; txt=c.replace(/(?:B\d+F|\d+F|RF)層?/g,''); }
       else{
         if(floors.length>=2){
           const hi=floors.reduce((x,y)=>LVL(y)>LVL(x)?y:x), lo=floors.reduce((x,y)=>LVL(y)<LVL(x)?y:x);
@@ -1626,6 +1628,10 @@ function summarizeLog(text){
         txt=c.replace(/(?:B\d+F|\d+F|RF)層?/g,'');
       }
       txt=txt.replace(/(?:施作|作業)+$/,'').replace(/^[、，,]+|[、，,]+$/g,'');
+      if(REBAR.test(txt) && /調整/.test(txt)){          // 鋼筋「調整」不算綁紮：去掉調整的那一段，只留綁紮的
+        const rg=/^([NS]\d區)/.exec(txt), cl=txt.replace(/^[NS]\d區/,'').split('及').filter(x=>x&&!/調整/.test(x));
+        if(!cl.length) continue; txt=(rg?rg[1]:'')+cl.join('及');
+      }
       if(!txt) continue;
       const rm=/([NS]\d)區/.exec(txt), ri=rm?REGIONS.indexOf(rm[1]):99;
       items.push({cat,txt,rebar:REBAR.test(txt),ri:ri<0?99:ri});
@@ -1641,13 +1647,13 @@ function summarizeLog(text){
     const non=sortR(list.filter(x=>!x.rebar)), reb=sortR(list.filter(x=>x.rebar));
     reb.forEach(x=>{ x.txt=x.txt.replace(/(?:綁紮|組立|安裝|施作)$/,''); });             // 鋼筋收尾統一寫「鋼筋綁紮作業」
     const all=non.concat(reb), last=all[all.length-1];
-    const body=all.map(x=>x.txt).join('、')+((reb.length&&/筋$/.test(last.txt))?'綁紮作業。':'作業。');
+    const body=all.map(x=>x.txt).join('、')+(cat==='鋼構'?'':((reb.length&&/筋$/.test(last.txt))?'綁紮作業。':'作業。'));
     return `(${i+1})${cat==='鋼構'||cat==='其他'?cat:cat+'層'}：${body}`;
   });
   if(!lines.length) return '';
-  const dm=/填表日期[：:\s]*(\d{2,3})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/.exec(text||'');
-  return '建工辦況：\n'+lines.join('\n')+(dm?`\n（${dm[1]}/${+dm[2]}/${+dm[3]}）`:'');
+  return lines.join('\n');
 }
+function logDate(text){ const m=/(\d{2,3})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/.exec(text||''); return m?`（${m[1]}/${+m[2]}/${+m[3]}）`:''; }
 g('l_sum').onclick = ()=>{
   const out=g('l_sumMsg'), log=g('l_log').value.trim(); out.textContent=''; out.className='status';
   if(!log){ out.textContent='請先貼上施工日誌'; out.className='status err'; return; }
@@ -1666,7 +1672,8 @@ async function run(){
   if(!isNaN(est)){ C(cols.est).value=Math.round(est*100)/1e4; report.push(`估驗進度：${est.toFixed(2)}%`); } else report.push('（估驗進度未填，未更新）');
   const ban=g('l_ban').value.trim();
   if(ban){
-    const body=ban.replace(/^建工辦況[：:]\s*\n?/,''), old=C(cols.note).value;
+    let body=ban.replace(/^建工辦況[：:]\s*\n?/,''); const old=C(cols.note).value, dd=logDate(g('l_log').value);
+    if(dd && !/（[^）]*）\s*$/.test(body)) body+='\n'+dd;
     const runs=old&&old.richText?old.richText:[];
     const f0=runs[0]&&runs[0].font, f1=(runs[1]&&runs[1].font)||{name:'標楷體',size:24,color:{argb:'FFFF0000'}};
     C(cols.note).value={richText:[{text:'建工辦況：\n',font:f0||{name:'標楷體',size:24}},{text:body,font:f1}]};
