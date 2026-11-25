@@ -264,9 +264,9 @@ details summary{cursor:pointer;color:var(--sub);font-size:13px;margin-top:6px}
   </section>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script defer src="lib/xlsx.full.min.js"></script>
+<script defer src="lib/exceljs.min.js"></script>
+<script defer src="lib/pdf.min.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const store = {
@@ -1031,7 +1031,7 @@ $('btnDiag').onclick=async()=>{
   const ping=async(name,url)=>{ const t=Date.now(); try{ await Promise.race([fetch(url,{mode:'no-cors',cache:'no-store'}),new Promise((_,r)=>setTimeout(()=>r(new Error('逾時')),8000))]); L.push(`✓ 連得到 ${name}（${Date.now()-t} 毫秒）`); }catch(e){ L.push(`✗ 連不到 ${name}：${e.message}`); } };
   await ping('Google 登入（accounts.google.com）','https://accounts.google.com/gsi/client');
   await ping('Google 雲端硬碟（www.googleapis.com）','https://www.googleapis.com/generate_204');
-  await ping('元件庫（cdnjs.cloudflare.com）','https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+  await ping('本站元件庫（lib/）','lib/xlsx.full.min.js');
   const on=store.get('jd_g','')==='1';
   L.push(`Google 用戶端 ID：${clientId()?'已設定':'✗ 這台電腦還沒設定'}`);
   L.push(`Google 登入狀態：${gOK()?'✓ 已連線 '+store.get('jd_gmail',''):(on?'✗ 曾登入但授權已中斷，請按「重新連線 Google」':'✗ 這台電腦還沒登入')}`);
@@ -1342,7 +1342,7 @@ async function getWorker(setMsg){
 }
 async function ocrPdf(file,setMsg){
   if(!window.pdfjsLib) throw new Error('PDF 元件沒有載入成功');
-  pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  pdfjsLib.GlobalWorkerOptions.workerSrc=new URL('lib/pdf.worker.min.js',location.href).href;
   const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
   let layer=''; for(let p=1;p<=Math.min(3,pdf.numPages);p++){ const c=await (await pdf.getPage(p)).getTextContent(); layer+=c.items.map(i=>i.str).join('')+'\n'; }
   if(layer.replace(/[\s.]/g,'').length>150){ setMsg('讀取文字…'); return layer; }
@@ -1442,7 +1442,7 @@ function toLines(items){
   return lines;
 }
 async function readPdf(buf){
-  pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  pdfjsLib.GlobalWorkerOptions.workerSrc=new URL('lib/pdf.worker.min.js',location.href).href;
   const pdf=await pdfjsLib.getDocument({data:buf}).promise, lines=[];
   for(let p=1;p<=pdf.numPages;p++){
     const tc=await (await pdf.getPage(p)).getTextContent();
