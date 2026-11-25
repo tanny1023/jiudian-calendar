@@ -955,8 +955,15 @@ async function onTok(r){
 }
 function gLogin(prompt){
   if(!clientId()){ $('gset').open=true; $('gset').scrollIntoView({block:'center'}); setSync('請先貼上 Google OAuth 用戶端 ID',true); return; }
-  if(!gInit()){ setSync('Google 元件尚未載入，請確認網路後重新整理',true); return; }
-  gTC.requestAccessToken({prompt});
+  loadGsi().then(()=>{
+    if(!gInit()){ setSync('Google 元件載入失敗（可能被公司網路擋住），請確認網路後再試',true); return; }
+    gTC.requestAccessToken({prompt});
+  }).catch(()=>setSync('連不到 Google（可能被公司網路擋住）：這台電腦無法登入同步，其他功能不受影響',true));
+}
+let gsiP=null;
+function loadGsi(){        // 要用到 Google 登入時才載入，平常開網頁不會連 Google
+  if(window.google&&google.accounts) return Promise.resolve();
+  return gsiP||(gsiP=new Promise((res,rej)=>{ const sc=document.createElement('script'); sc.src='https://accounts.google.com/gsi/client'; sc.async=true; sc.onload=res; sc.onerror=()=>{ gsiP=null; rej(new Error('gsi')); }; document.head.appendChild(sc); }));
 }
 async function gfetch(url,opt={}){
   const r=await fetch(url,Object.assign({},opt,{headers:Object.assign({Authorization:'Bearer '+gTok},opt.headers||{})}));
@@ -1027,7 +1034,7 @@ $('btnDiag').onclick=async()=>{
   const box=$('diagBox'); box.hidden=false; box.textContent='檢查中…';
   const L=[`時間：${new Date().toLocaleString('zh-TW')}`,`網址：${location.href}`];
   try{ localStorage.setItem('jd_t','1'); localStorage.removeItem('jd_t'); L.push('✓ 瀏覽器儲存空間正常'); }catch(e){ L.push('✗ 瀏覽器儲存空間不能用（無痕模式或被封鎖），資料無法保存：'+e.message); }
-  L.push(`${typeof XLSX!=='undefined'?'✓':'✗'} Excel 元件（cdnjs）　${typeof ExcelJS!=='undefined'?'✓':'✗'} ExcelJS　${typeof pdfjsLib!=='undefined'?'✓':'✗'} PDF 元件　${window.google&&google.accounts?'✓':'✗'} Google 登入元件`);
+  L.push(`${typeof XLSX!=='undefined'?'✓':'✗'} Excel 元件（cdnjs）　${typeof ExcelJS!=='undefined'?'✓':'✗'} ExcelJS　${typeof pdfjsLib!=='undefined'?'✓':'✗'} PDF 元件　${window.google&&google.accounts?'✓':'—'} Google 登入元件（按登入時才載入）`);
   const ping=async(name,url)=>{ const t=Date.now(); try{ await Promise.race([fetch(url,{mode:'no-cors',cache:'no-store'}),new Promise((_,r)=>setTimeout(()=>r(new Error('逾時')),8000))]); L.push(`✓ 連得到 ${name}（${Date.now()-t} 毫秒）`); }catch(e){ L.push(`✗ 連不到 ${name}：${e.message}`); } };
   await ping('Google 登入（accounts.google.com）','https://accounts.google.com/gsi/client');
   await ping('Google 雲端硬碟（www.googleapis.com）','https://www.googleapis.com/generate_204');
@@ -1057,7 +1064,7 @@ function gBoot(){
   updateBtn();
   if(store.get('jd_g','')==='1' && clientId() && gInit()){ setSync('正在連線 Google…'); gTC.requestAccessToken({prompt:'none'}); }
 }
-window.addEventListener('load',()=>{ const sc=document.createElement('script'); sc.src='https://accounts.google.com/gsi/client'; sc.async=true; sc.onload=gBoot; document.head.appendChild(sc); updateBtn(); });
+window.addEventListener('load',()=>{ updateBtn(); if(store.get('jd_g','')==='1') loadGsi().then(gBoot).catch(()=>setSync('連不到 Google，這台電腦暫時無法同步',true)); if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{}); });
 
 /* ---------- 估驗計價 ---------- */
 const EST_SEED = 
