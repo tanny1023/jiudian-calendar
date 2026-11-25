@@ -123,6 +123,7 @@ details summary{cursor:pointer;color:var(--sub);font-size:13px;margin-top:6px}
       <button class="ghost" id="btnExport">匯出 Excel</button>
       <button class="ghost" id="btnTsv">複製本月（貼回 Excel）</button>
       <button class="ghost" id="btnG">Google 登入同步</button>
+      <button class="ghost" id="btnDiag">連線檢查</button>
       <input type="file" id="file" accept=".xlsx,.xlsm,.xls" hidden>
     </div>
     <div class="notes" id="afbox" hidden style="margin:0 0 10px">
@@ -139,6 +140,7 @@ details summary{cursor:pointer;color:var(--sub);font-size:13px;margin-top:6px}
       <div class="status" id="afRes" style="margin-top:6px"></div>
     </div>
     <div class="status" id="saveStatus"></div>
+    <pre id="diagBox" hidden style="white-space:pre-wrap;background:#fff;border:1px solid #000;border-radius:8px;padding:10px;margin:0 0 10px;font:13px/1.6 'Microsoft JhengHei',monospace;color:#000"></pre>
     <div class="status" id="syncStatus" style="color:var(--sub)"></div>
     <details class="notes" id="gset" style="margin-bottom:10px">
       <summary style="margin:0">Google 同步設定（第一次使用才需要）</summary>
@@ -1021,6 +1023,21 @@ async function syncNow(){
   }catch(e){ setSync('同步失敗：'+(e.message||e),true); }
   finally{ syncing=false; updateBtn(); }
 }
+$('btnDiag').onclick=async()=>{
+  const box=$('diagBox'); box.hidden=false; box.textContent='檢查中…';
+  const L=[`時間：${new Date().toLocaleString('zh-TW')}`,`網址：${location.href}`];
+  try{ localStorage.setItem('jd_t','1'); localStorage.removeItem('jd_t'); L.push('✓ 瀏覽器儲存空間正常'); }catch(e){ L.push('✗ 瀏覽器儲存空間不能用（無痕模式或被封鎖），資料無法保存：'+e.message); }
+  L.push(`${typeof XLSX!=='undefined'?'✓':'✗'} Excel 元件（cdnjs）　${typeof ExcelJS!=='undefined'?'✓':'✗'} ExcelJS　${typeof pdfjsLib!=='undefined'?'✓':'✗'} PDF 元件　${window.google&&google.accounts?'✓':'✗'} Google 登入元件`);
+  const ping=async(name,url)=>{ const t=Date.now(); try{ await Promise.race([fetch(url,{mode:'no-cors',cache:'no-store'}),new Promise((_,r)=>setTimeout(()=>r(new Error('逾時')),8000))]); L.push(`✓ 連得到 ${name}（${Date.now()-t} 毫秒）`); }catch(e){ L.push(`✗ 連不到 ${name}：${e.message}`); } };
+  await ping('Google 登入（accounts.google.com）','https://accounts.google.com/gsi/client');
+  await ping('Google 雲端硬碟（www.googleapis.com）','https://www.googleapis.com/generate_204');
+  await ping('元件庫（cdnjs.cloudflare.com）','https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+  const on=store.get('jd_g','')==='1';
+  L.push(`Google 用戶端 ID：${clientId()?'已設定':'✗ 這台電腦還沒設定'}`);
+  L.push(`Google 登入狀態：${gOK()?'✓ 已連線 '+store.get('jd_gmail',''):(on?'✗ 曾登入但授權已中斷，請按「重新連線 Google」':'✗ 這台電腦還沒登入')}`);
+  L.push(`上次同步：${+store.get('jd_last','0')?new Date(+store.get('jd_last','0')).toLocaleString('zh-TW'):'從未'}　本機最後修改：${+store.get('jd_mod','0')?new Date(+store.get('jd_mod','0')).toLocaleString('zh-TW'):'—'}`);
+  box.textContent=L.join('\n');
+};
 $('syncBannerBtn').onclick=()=>$('btnG').click();
 $('btnG').onclick=()=>{
   if(store.get('jd_g','')==='1' && gOK()){
