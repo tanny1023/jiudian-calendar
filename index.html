@@ -1829,5 +1829,40 @@ window._land={summarizeLog,loadBase,run,getBase:()=>base,setBase:b=>{base=b;}};
   g('c_banCopy').onclick=async()=>{ const ok=await copyText(g('c_ban').value); g('c_sumMsg').textContent=ok?'已複製簡要辦況':'複製失敗，請手動選取'; g('c_sumMsg').className='status'+(ok?' ok':' err'); };
 })();
 </script>
+<script>
+/* ---------- 單機版／備份 ---------- */
+(function(){
+  const PRE='jd_', SKIP=['jd_g','jd_gmail','jd_last','jd_mod','jd_t'], OFF=location.protocol==='file:';
+  const bar=document.createElement('div');
+  bar.style.cssText='display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:4px 0 12px';
+  bar.innerHTML='<button type="button" id="bkOut" style="padding:6px 12px;border:1px solid #888;border-radius:8px;background:#fff;color:#000;cursor:pointer;font:inherit;font-size:14px">備份全部資料</button>'
+    +'<button type="button" id="bkIn" style="padding:6px 12px;border:1px solid #888;border-radius:8px;background:#fff;color:#000;cursor:pointer;font:inherit;font-size:14px">還原備份</button>'
+    +'<input type="file" id="bkFile" accept=".json" hidden><span id="bkNote" style="font-size:13px;color:#555"></span>';
+  const h=document.querySelector('h1'); (h||document.body.firstChild).insertAdjacentElement('afterend',bar);
+  const $b=id=>document.getElementById(id);
+  if(OFF){
+    const st=document.createElement('style'); st.textContent='#btnG,#gset,#syncBanner,#btnDiag,#syncTop,#syncStatus{display:none!important}'; document.head.appendChild(st);
+    $b('bkNote').textContent='單機版：資料存在這台電腦的瀏覽器裡，換電腦請用「備份全部資料」→ 在新電腦「還原備份」。';
+  }
+  $b('bkOut').onclick=()=>{
+    const data={}; for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(k.startsWith(PRE)&&!SKIP.includes(k)) data[k]=localStorage.getItem(k); }
+    if(!Object.keys(data).length){ alert('目前沒有可備份的資料。'); return; }
+    const t=new Date(), p=n=>String(n).padStart(2,'0');
+    const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify({app:'報表進度小幫手',time:t.toISOString(),data})],{type:'application/json'}));
+    a.download=`報表進度小幫手_備份_${t.getFullYear()}${p(t.getMonth()+1)}${p(t.getDate())}_${p(t.getHours())}${p(t.getMinutes())}.json`; a.click();
+  };
+  $b('bkIn').onclick=()=>$b('bkFile').click();
+  $b('bkFile').addEventListener('change',async e=>{
+    const f=e.target.files[0]; e.target.value=''; if(!f) return;
+    try{
+      const j=JSON.parse(await f.text());
+      if(j.app!=='報表進度小幫手'||!j.data) throw new Error('這不是本工具的備份檔');
+      if(!confirm(`要用「${f.name}」覆蓋這台電腦目前的資料嗎？`)) return;
+      for(const [k,v] of Object.entries(j.data)) if(k.startsWith(PRE)) localStorage.setItem(k,v);
+      location.reload();
+    }catch(err){ alert('還原失敗：'+(err.message||err)); }
+  });
+})();
+</script>
 </body>
 </html>
